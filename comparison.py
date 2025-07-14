@@ -187,6 +187,9 @@ def main(
         compare_generate(m_old, m_new, tokenizer)
         return
 
+    print("Warming up...")
+    list(generate(m_new, 'hello world!!!', max_tokens, temp, top_p))
+
     while True:
         prompt = input("\nPrompt: ").strip()
         if not prompt: exit()
@@ -204,6 +207,7 @@ def main(
                 for c in chunk.split('\n')
             )
             print(s, flush=True, end='')
+        print()
 
 
 # To validate: `LOVELY_TENSORS=1 uv run comparison.py`

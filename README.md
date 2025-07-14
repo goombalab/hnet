@@ -1,3 +1,41 @@
+# H-Net (simple inference impl)
+
+This repository contains a simplified reimplementation of H-Net bs1 inference, for personal understanding.
+
+[`hnet_simple.py`](./hnet_simple.py) is a ~300LOC file that implements the non-isotropic blocks in a H-Net, while borrowing the rest from the original repo.
+
+[`comparison.py`](./comparison.py) is a simple script to compare results with the original repo's impl, where it (mostly) matches.
+
+I do not reimplement the transformer/mamba blocks, as civilization has done that 99999999 times and nobody needs to see another copy of them.
+
+### Running
+install:
+```python
+uv venv --python 3.11
+uv add torch
+uv sync --no-build-isolation
+# download a model to cwd, e.g.
+uv run huggingface-cli download --local-dir . cartesia-ai/hnet_2stage_L hnet_2stage_L.pt 
+```
+
+testing:
+```python
+$ uv run comparison.py --model hnet_1stage_L.pt --config configs/hnet_1stage_L.json
+Loading model...
+tensor[1, 17, 256] bf16 n=4352 (8.5Kb) x∈[-20.625, 14.688] μ=-7.469 σ=5.094 cuda:0
+tensor[1, 17, 256] bf16 n=4352 (8.5Kb) x∈[-20.500, 14.625] μ=-7.469 σ=5.094 cuda:0
+prefill diff: tensor[1, 17, 256] bf16 n=4352 (8.5Kb) x∈[-0.125, 0.125] μ=0.001 σ=0.030 cuda:0
+tensor[1, 1, 256] bf16 x∈[-16.125, 5.688] μ=-7.000 σ=5.531 cuda:0
+tensor[1, 1, 256] bf16 x∈[-16.125, 5.719] μ=-7.000 σ=5.531 cuda:0
+ decode diff: tensor[1, 1, 256] bf16 x∈[-0.062, 0.062] μ=-0.004 σ=0.019 cuda:0
+generation: ', programs hello world, programs hello world\nYou s'
+```
+
+prompting:
+
+[![asciicast](https://asciinema.org/a/a9EOUrQemZUvAXHBzAqF8f4AX.svg)](https://asciinema.org/a/a9EOUrQemZUvAXHBzAqF8f4AX)
+
+
 # H-Net
 
 <table width="100%">
