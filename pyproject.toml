@@ -20,6 +20,11 @@ dependencies = [
     "optree",
     "regex",
     "omegaconf",
+    "coverage>=7.9.2",
+    "codecov-cli>=11.0.3",
+    "lovely-tensors>=0.1.18",
+    "typer>=0.16.0",
+    "termcolor>=3.1.0",
 ]
 [project.urls]
 Repository = "https://github.com/goombalab/hnet"
