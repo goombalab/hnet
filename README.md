@@ -30,6 +30,141 @@ then download a model to cwd, e.g.
 uv run huggingface-cli download --local-dir . cartesia-ai/hnet_2stage_L hnet_2stage_L.pt 
 ```
 
+---
+
+## H-Net (training)
+
+This repository contains a simple training implementation of H-Net for langauge modeling.
+
+![](https://main-horse.github.io/posts/hnet-trn/wandb-sample.png)
+
+[`hnet_trainable.py`](./hnet_trainable.py) is my ~600LOC NJT-based impl of a trainable, block-compilable H-Net.
+
+[`train.py`](./train.py) is a dumb handwritten script to train fineweb-10BT on H-Net.
+
+Both of these scripts should be considered an **active WIP**. They are not efficient, but should be a good starting point for other people in the community to start work & fork from.
+
+### test compilation on 1gpu
+The following command should exit without errors on your machine:
+```bash
+uv run hnet_trainable.py
+```
+
+If it does not, please provide [`collect_env.py`](https://raw.githubusercontent.com/pytorch/pytorch/main/torch/utils/collect_env.py) information, as I have seen it working on multiple machines:
+
+```bash
+$ CUDA_VISIBLE_DEVICES=2 uv run hnet_trainable.py 
+/hnet/.venv/lib/python3.11/site-packages/torch/backends/__init__.py:46: UserWarning: This API is going to be deprecated, please see https://pytorch.org/docs/main/notes/cuda.html#tensorfloat-32-tf32-on-ampere-and-later-devices (Triggered internally at /pytorch/aten/src/ATen/Context.cpp:78.)
+  self.setter(val)
+/hnet/hnet_trainable.py:601: UserWarning: Anomaly Detection has been enabled. This mode will increase the runtime and should only be enabled for debugging.
+  with torch.autograd.detect_anomaly(False):
+Eager worked.
+100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 30/30 [01:03<00:00,  2.11s/it]
+compile also worked (apparently)
+```
+
+### test fwd equivalence
+This command verifies that the training H-Net impl produces the same logits as the inference impl, given a pretrained checkpoint + config.
+```bash
+LOVELY_TENSORS=1 uv run train.py -e generate -c configs/hnet_1stage_L.json -p hnet_1stage_L.pt
+```
+
+You should see no assertion errors if you run it.
+
+### fineweb training
+To try training a H-Net on Fineweb-10BT, start by downloading the dataset:
+```bash
+uv run --with huggingface-hub huggingface-cli download --repo-type dataset HuggingFaceFW/fineweb --include sample/10BT/*
+uv run fineweb.py
+```
+This produces a local dump of `10BT/{seqlen}/{hash}.txt` files. It works on my SSD, but **do not try this on an NFS**, or on any storage device with low lifespans.
+
+To use the dataset to test training with 1 GPU, run the following:
+```bash
+uv run torchrun --nproc-per-node 1 --standalone train.py
+```
+
+That should (after some waiting time) produce output logs like:
+
+![](https://main-horse.github.io/posts/hnet-trn/training_log.jpeg)
+
+Once you have confirmed that works, you can try training for slightly longer, on 8 GPUs:
+```bash
+LOVELY_TENSORS=1 OMP_NUM_THREADS=9 \
+  uv run torchrun --nproc-per-node 8 --standalone train.py \
+  --config configs/hnet_2stage_small.json \
+  --n-compression 1-3-9 \
+  --compile block \
+  --steps 9999 \
+  --save-dir /tmp/hnet \
+  --logger wandb
+```
+
+If that also works for you, try training larger networks.
+
+Although I hope this work encourages the broader community to partake in scaling laws analysis with H-Net, I would advise caution against using this codebase immediately, without verifying the correctness of its distributed impl.
+
+### specifics of training
+
+#### General correctness
+Due to the inference check above, the forward pass for my training H-Net should be correct.
+
+For the backward pass, there are three uncertainties I would consider:
+1. Numerical problems. For example:
+  - I intentionally eskew the original H-Net author's decision to use fp32 residuals + amp.autocast, in favor of defaulting to bfloat16. I do this because this is the default behavior of any FSDP2'd module with `nn.Embedding`, and is quite troublesome to fight against.
+  - I removed some kernels from the original code for simplicity, but it is not obvious what potential impact this could have on numerical differences over a full training run.
+2. Correctness problems.
+  - I implement some bespoke ops to support NJT backwards. Although I think they are correct, I am not high confidence.
+  - I use a slightly different solution from the authors to implement $p_0=0.0$ padding in computing the routing module's cosine sim. I added tests to verify my approach, but perhaps those are wrong too.
+3. torch problems. I do not know if there are secret bugs in `torch.nested`, if dyanmo/aotautograd/inductor introduce silent bugs, or if the version of nightly I pulled is actually bugged.
+
+Despite all of those potential problems, basic training does indicate the model is learning, and not fully broken.
+
+- The celoss/bpb curves above indicate the model is learning.
+- The behavior of $L_{ratio}$ matches what the paper says should occur (hovering around 1)
+- The compression ratio graphs indicate the model is targetting the `N_compression` ratios assigned in config:
+
+![](https://main-horse.github.io/posts/hnet-trn/comp-ratio.png)
+
+So I think the architecture itself is implemented correctly.
+
+#### NJTs
+[Nested Tensors](https://docs.pytorch.org/docs/stable/nested.html) are the most sensible abstraction for HNets of arbitrary depth.
+
+The sequence lengths involved throughout a HNet will always be unavoidably (const batch size) varlen, with those sequence lengths changing throughout the train step. Even if you invented your own bespoke datastructure to track cu_seqlens, it would end up quite similar to the structure of an NJT.
+
+Unfortunately, NJTs are currently [abandonware](https://github.com/pytorch/pytorch/issues/145837#issuecomment-2830826574), with many bugs & key ops missing. I include various modifications in my implementation to ensure the model compiles & trains, but you should not be surprised if ostensibly benign modifications to the code cause pytorch errors to surface.
+
+If you do not like NJTs, I recommend writing your own impl from scratch. Much like DTensors, NJTs are a [colored object](https://journal.stuffwithstuff.com/2015/02/01/what-color-is-your-function/); the code I've written is littered with assumptions of NJT presence.
+
+#### Auxillary training work
+From my understanding, the paper needs two extra compute steps during training:
+1. **Ratio Loss**, which is implemented under `HNet.ratio_loss` and hardcoded to α=.03 in `train_step`
+2. **Learning Rate Modulation**. I attempt to implement their [Equation (11)](https://arxiv.org/pdf/2507.07955#page=35) under `lr_modulation(...)`; empirically this returns something like `[12,6,2]`?
+
+Please let me know if I have missed any significant steps.
+
+#### Inference
+I dislike co-locating inference & training code, so I do a pointer copy of weights to my original HNet Inference impl to test sampling where needed.
+
+This necessarily bloats the amount of code you'd have to copy to make the train script work immediately. I recommend deleting the sampling code if you do not need it.
+
+#### Efficiency
+This codebase is not efficient. Actually, the MFU is quite bad.
+
+This is primarily because I have not spent the time to optimize the Isotropic blocks, causing their execution profiles to be full of ugly white bubbles (tbd add image)
+
+I would appreciate guidance from the original authors on this topic, as I am sure they have already spent great amounts of time optimizing their own internal training stack.
+
+#### Future scaling
+This codebase is NOT scalable beyond basic FSDP. There is no support for meta/distributed init (and much code assumes `__init__` can alloc tensors).
+
+You will have to rewrite the codebase from scratch to implement tp/sp/cp/...
+
+Additionally, there is 0 effort to adjust the init scheme of any modules away from torch defaults. I do this because such information is absent from the paper too, so I presume the defaults _are_ what goombalab used -- with the sole exception of the `.residual_proj`, which is zero-inited, following their code.
+
+---
+
 ## Inference
 
 [`hnet_simple.py`](./hnet_simple.py) is a ~300LOC file that implements the non-isotropic blocks in a H-Net, while borrowing the rest from the original repo.
