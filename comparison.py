@@ -51,6 +51,7 @@ def load_models(model_path: str, config_path: str, *, device: str='cuda'):
 ###
 ### Generation fns
 
+@torch.inference_mode
 def generate(model, prompt: str, max_tokens: int = 1024, temperature: float = 1.0, top_p: float = 0.9):
     device = next(model.parameters()).device
 
@@ -63,7 +64,7 @@ def generate(model, prompt: str, max_tokens: int = 1024, temperature: float = 1.
     inference_cache = model.allocate_inference_cache(1, iids.size(1)+max_tokens, dtype=torch.bfloat16)
     with torch.inference_mode():
         mask = torch.ones(iids.shape, device=device, dtype=torch.bool)
-        output = model.forward(iids, mask=mask, inference_params=inference_cache)
+        output = model(iids, mask=mask, inference_params=inference_cache)
 
     logits = getattr(output,'logits',output)[0, -1, :] / temperature
 

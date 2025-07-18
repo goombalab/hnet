@@ -4,8 +4,12 @@ This repository contains simplified reimplementations of H-Net, for personal und
 
 ## Installation
 Fresh venv (with torch nightly):
+
 ```bash
-uv sync --python 3.11
+uv venv --python 3.11
+uv pip install setuptools ninja psutil
+uv pip install "torch==2.9.0.dev20250715+cu126" --index-url "https://download.pytorch.org/whl/nightly/cu126" 
+uv sync
 uv sync --extra build --no-install-package triton # build no-isolation deps
 
 # if you have caching issues:
@@ -15,6 +19,10 @@ uv sync --extra build --no-install-package triton # build no-isolation deps
 # uv pip install --no-build-isolation --no-cache  "flash_attn==2.8.0.post2" \
 #   "mamba_ssm @ git+https://github.com/state-spaces/mamba.git@a6a1dae6efbf804c9944a0c2282b437deb4886d8" \
 #   "causal_conv1d @ git+https://github.com/Dao-AILab/causal-conv1d.git@e940ead2fd962c56854455017541384909ca669f"
+
+# if you accidentally pull triton:
+uv pip uninstall triton pytorch-triton
+uv pip install pytorch-triton "torch==2.9.0.dev20250715+cu126" --index-url "https://download.pytorch.org/whl/nightly/cu126" 
 ```
 
 then download a model to cwd, e.g.
