@@ -6,16 +6,14 @@ authors = [
     { name = "Sukjun Hwang", email = "sukjunh@cs.cmu.edu" },
     { name = "Brandon Wang", email = "brandon.wang@cartesia.ai"},
     { name = "Albert Gu", email = "agu@cs.cmu.edu" },
+    { name = "main", email = "a@b.com" },
 ]
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.9"
+requires-python = ">=3.11,<3.12"
 dependencies = [
-    "torch>=2.5.1",
-    "triton>=3.2.0",
-    "mamba_ssm @ git+https://github.com/state-spaces/mamba.git@a6a1dae6efbf804c9944a0c2282b437deb4886d8",
-    "flash_attn==2.8.0.post2",
-    "causal_conv1d @ git+https://github.com/Dao-AILab/causal-conv1d.git@e940ead2fd962c56854455017541384909ca669f",
+    "torch==2.9.0.dev20250715+cu126",
+    "pytorch-triton", # "triton>=3.2.0",
     "einops",
     "optree",
     "regex",
@@ -25,9 +23,15 @@ dependencies = [
     "lovely-tensors>=0.1.18",
     "typer>=0.16.0",
     "termcolor>=3.1.0",
+    "ninja",
+    "psutil",
+    "pdbpp>=0.11.6",
+    "pyarrow>=20.0.0",
+    "wandb>=0.21.0",
+    "py-spy>=0.4.0",
 ]
 [project.urls]
-Repository = "https://github.com/goombalab/hnet"
+Repository = "https://github.com/main-horse/hnet"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -38,8 +42,24 @@ exclude = ["tests*"]
 requires = [
     "setuptools>=61.0.0",
     "wheel",
-    "torch",
     "packaging",
-    "ninja",
 ]
 build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+build = [
+  "mamba_ssm @ git+https://github.com/state-spaces/mamba.git@a6a1dae6efbf804c9944a0c2282b437deb4886d8",
+  "flash_attn==2.8.0.post2",
+  "causal_conv1d @ git+https://github.com/Dao-AILab/causal-conv1d.git@e940ead2fd962c56854455017541384909ca669f",
+]
+[tool.uv]
+no-build-isolation-package = ["flash-attn", "mamba_ssm", "causal_conv1d"]
+
+[[tool.uv.index]]
+name = "nightly"
+url = "https://download.pytorch.org/whl/nightly/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "nightly" }]
+pytorch-triton = [{ index = "nightly" }]

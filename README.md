@@ -1,6 +1,28 @@
-# H-Net (simple inference impl)
+# H-Net (simple reference impl)
 
-This repository contains a simplified reimplementation of H-Net bs1 inference, for personal understanding.
+This repository contains simplified reimplementations of H-Net, for personal understanding.
+
+## Installation
+Fresh venv (with torch nightly):
+```bash
+uv sync --python 3.11
+uv sync --extra build --no-install-package triton # build no-isolation deps
+
+# if you have caching issues:
+uv pip uninstall mamba_ssm causal_conv1d flash_attn && uv cache clean mamba_ssm causal_conv1d flash_attn && rm uv.lock
+uv sync --extra build --no-install-package triton # build no-isolation deps
+# or give up:
+# uv pip install --no-build-isolation --no-cache  "flash_attn==2.8.0.post2" \
+#   "mamba_ssm @ git+https://github.com/state-spaces/mamba.git@a6a1dae6efbf804c9944a0c2282b437deb4886d8" \
+#   "causal_conv1d @ git+https://github.com/Dao-AILab/causal-conv1d.git@e940ead2fd962c56854455017541384909ca669f"
+```
+
+then download a model to cwd, e.g.
+```python
+uv run huggingface-cli download --local-dir . cartesia-ai/hnet_2stage_L hnet_2stage_L.pt 
+```
+
+## Inference
 
 [`hnet_simple.py`](./hnet_simple.py) is a ~300LOC file that implements the non-isotropic blocks in a H-Net, while borrowing the rest from the original repo.
 
@@ -9,15 +31,6 @@ This repository contains a simplified reimplementation of H-Net bs1 inference, f
 I do not reimplement the transformer/mamba blocks, as civilization has done that 99999999 times and nobody needs to see another copy of them.
 
 ### Running
-install:
-```python
-uv venv --python 3.11
-uv add torch
-uv sync --no-build-isolation
-# download a model to cwd, e.g.
-uv run huggingface-cli download --local-dir . cartesia-ai/hnet_2stage_L hnet_2stage_L.pt 
-```
-
 testing:
 ```python
 $ uv run comparison.py --model hnet_1stage_L.pt --config configs/hnet_1stage_L.json
@@ -35,6 +48,7 @@ prompting:
 
 [![asciicast](https://asciinema.org/a/a9EOUrQemZUvAXHBzAqF8f4AX.svg)](https://asciinema.org/a/a9EOUrQemZUvAXHBzAqF8f4AX)
 
+---
 
 # H-Net
 

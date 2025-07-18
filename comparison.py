@@ -12,6 +12,7 @@ from hnet_simple import HNetLM, AttnConfig, SSMConfig, HNetConfig
 class ByteTokenizer:
     vocab_size: int = 256
     eos_idx: int = 255
+    bos_idx: int = 254
     bos: bytes = b'\xfe'
     def encode(self, seqs: list[str]): return [
         { 'input_ids': np.frombuffer(self.bos+s.encode(), dtype=np.uint8) }
@@ -86,7 +87,7 @@ def generate(model, prompt: str, max_tokens: int = 1024, temperature: float = 1.
         probs = torch.softmax(logits, dim=-1)
         next_token = torch.multinomial(probs, 1)
 
-        if next_token.item() == tokenizer.eos_idx:
+        if next_token.item() in [tokenizer.eos_idx, tokenizer.bos_idx]:
             break
 
         current_token = next_token.unsqueeze(0)
@@ -122,7 +123,8 @@ def yield_utf8_chunks(g):
         try:
             chunk.append(tokenizer.decode(chars))
             chars = []
-        except: pass
+        except: # only let UDC raise up iff exceeds max byte length
+            if len(chars) > 4: raise
 
     if chunk: yield ''.join(chunk)
     if chars: pass # do nothing to dropped bytes

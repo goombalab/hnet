@@ -195,3 +195,5 @@ cython_debug/
 
 *.pt
 uv.lock
+
+10BT
