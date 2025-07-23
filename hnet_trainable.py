@@ -197,7 +197,7 @@ class Block(nn.Module):
         if isinstance(self.mixer, mamba2.Mamba2): x = self.mixer(x[None], seq_idx=seq_idx)[0]
         else: x = self.mixer(x, cu_seqlens.int(), max_seqlen)
         if self.norm2 is None: return x, residual
-        x = F.rms_norm(residual:=x+residual, x.shape[-1:], self.norm1.weight, self.norm1.eps)
+        x = F.rms_norm(residual:=x+residual, x.shape[-1:], self.norm2.weight, self.norm2.eps)
         return self.mlp(x), residual
 
     def forward_njt(self, x: TT, residual: TT | None):
@@ -398,7 +398,7 @@ class DeChunkLayer(nn.Module):
     def ema_scan_njt(self, x: TT, p: TT):
         dt = -torch.log1p(-p.float())[...,None]
         x = (x.float()/dt).type_as(x)
-        c = torch.ones_like(p := p.values()[None,:,None,None])
+        c = torch.ones_like(p := p.type_as(x).values()[None,:,None,None])
             
         return mamba_chunk_scan_combined(
             x.values().view(1, -1, self.nheads, self.headdim),
@@ -407,9 +407,10 @@ class DeChunkLayer(nn.Module):
             chunk_size=self.block_size, seq_idx=get_seq_idx(x.offsets(), x.values().shape[0]),
         )[0].view(-1, x.shape[-1])
 
-    def forward(self, x: TT, bpred: SequenceRouting, *, eps=4e-3):
+    # def forward(self, x: TT, bpred: SequenceRouting, *, eps=4e-3):
+    def forward(self, x: TT, bpred: SequenceRouting, *, eps=1e-4):
         # log1p(-1) == inf == x/log1p(0); so p must be clamped away from 0/1
-        p = bpred.p_selected.clamp(eps,1-eps)
+        p = bpred.p_selected.float().clamp(eps,1-eps)
         # 1-bf16[0.01111110.1111111] = 1-.99609375 ~= .004, so eps=4e-3
 
         z_bar_flat = self.ema_scan_njt(x,p) # njt -> flat values tensor

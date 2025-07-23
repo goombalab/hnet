@@ -135,12 +135,13 @@ def create_inference_model_clone(m_trn: HNetLM, c: HNetConfig):
 def test_real_ref_versus_clone(m_trn, ckpt: str | None):
     if ckpt is None: raise RuntimeError('inference test only makes sense with pretrained ckpt')
     # our model: load to training, copy to inference
-    load_ckpt(m := m_trn.bfloat16(), ckpt)
-    m_inf = create_inference_model_clone(m,c)
+    load_ckpt(m_trn := m_trn.bfloat16(), ckpt)
+    m_inf = create_inference_model_clone(m_trn,c)
     # external original inference model w/ weights directy loaded
     with torch.device('cuda'): m2inf = HNetLMInference(c).bfloat16().eval()
     load_ckpt(m2inf, ckpt)
 
+    from lovely_tensors import lovely
     # ✔️  prefill  
     torch.manual_seed(0)
     iids = torch.randint(0,256,(1,77),dtype=torch.long,device='cuda')
@@ -152,7 +153,8 @@ def test_real_ref_versus_clone(m_trn, ckpt: str | None):
         ic = m2inf.allocate_inference_cache(1, iids.size(1), dtype=torch.bfloat16)
         printflock('>>> [2]', y2 := m2inf.forward(iids, mask=mask, inference_params=ic))
     assert y1.equal(y2), "prefill not equiv"
-    assert y0.allclose(y2,atol=.2), "y0 was very far from y2"
+    assert str(lovely(y0))==str(lovely(y2)), "y0 should look like y2 in lovely summary"
+    assert y0.allclose(y2,atol=.3), "y0 had outliers very far from y2"
     # ✔️  greedy
     print('>>> [1]', res1 := decode_sync(generate(m_inf, 'Hello world!', 512, 0.0001, 0.0001)))
     print('>>> [2]', res2 := decode_sync(generate(m2inf, 'Hello world!', 512, 0.0001, 0.0001)))

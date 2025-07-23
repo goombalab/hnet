@@ -66,7 +66,7 @@ compile also worked (apparently)
 ### test fwd equivalence
 This command verifies that the training H-Net impl produces the same logits as the inference impl, given a pretrained checkpoint + config.
 ```bash
-LOVELY_TENSORS=1 uv run train.py -e generate -c configs/hnet_1stage_L.json -p hnet_1stage_L.pt
+LOVELY_TENSORS=1 uv run train.py -e generate -c configs/hnet_2stage_L.json -p hnet_2stage_L.pt
 ```
 
 You should see no assertion errors if you run it.
