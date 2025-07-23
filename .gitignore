@@ -194,7 +194,6 @@ cython_debug/
 .cursorindexingignore
 
 *.pt
-uv.lock
 chrometrace-*
 
 10BT

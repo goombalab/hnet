@@ -3,26 +3,15 @@
 This repository contains simplified reimplementations of H-Net, for personal understanding.
 
 ## Installation
-Fresh venv (with torch nightly):
+Fresh venv (torch==2.7.1+cu128):
 
 ```bash
-uv venv --python 3.11
-uv pip install setuptools ninja psutil
-uv pip install "torch==2.9.0.dev20250715+cu126" --index-url "https://download.pytorch.org/whl/nightly/cu126" 
 uv sync
-uv sync --extra build --no-install-package triton # build no-isolation deps
+uv sync --extra build
 
 # if you have caching issues:
 uv pip uninstall mamba_ssm causal_conv1d flash_attn && uv cache clean mamba_ssm causal_conv1d flash_attn && rm uv.lock
-uv sync --extra build --no-install-package triton # build no-isolation deps
-# or give up:
-# uv pip install --no-build-isolation --no-cache  "flash_attn==2.8.0.post2" \
-#   "mamba_ssm @ git+https://github.com/state-spaces/mamba.git@a6a1dae6efbf804c9944a0c2282b437deb4886d8" \
-#   "causal_conv1d @ git+https://github.com/Dao-AILab/causal-conv1d.git@e940ead2fd962c56854455017541384909ca669f"
-
-# if you accidentally pull triton:
-uv pip uninstall triton pytorch-triton
-uv pip install pytorch-triton "torch==2.9.0.dev20250715+cu126" --index-url "https://download.pytorch.org/whl/nightly/cu126" 
+uv sync --extra build
 ```
 
 then download a model to cwd, e.g.
@@ -116,7 +105,7 @@ For the backward pass, there are three uncertainties I would consider:
 2. Correctness problems.
   - I implement some bespoke ops to support NJT backwards. Although I think they are correct, I am not high confidence.
   - I use a slightly different solution from the authors to implement $p_0=0.0$ padding in computing the routing module's cosine sim. I added tests to verify my approach, but perhaps those are wrong too.
-3. torch problems. I do not know if there are secret bugs in `torch.nested`, if dyanmo/aotautograd/inductor introduce silent bugs, or if the version of nightly I pulled is actually bugged.
+3. torch problems. I do not know if there are secret bugs in `torch.nested`, or if dyanmo/aotautograd/inductor introduce silent bugs.
 
 Despite all of those potential problems, basic training does indicate the model is learning, and not fully broken.
 

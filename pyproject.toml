@@ -12,8 +12,8 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.11,<3.12"
 dependencies = [
-    "torch==2.9.0.dev20250715+cu126",
-    "pytorch-triton", # "triton>=3.2.0",
+    "torch",
+    "triton",
     "einops",
     "optree",
     "regex",
@@ -47,19 +47,21 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
-build = [
-  "mamba_ssm @ git+https://github.com/state-spaces/mamba.git@a6a1dae6efbf804c9944a0c2282b437deb4886d8",
-  "flash_attn==2.8.0.post2",
-  "causal_conv1d @ git+https://github.com/Dao-AILab/causal-conv1d.git@e940ead2fd962c56854455017541384909ca669f",
-]
+build = ["mamba-ssm==2.2.5", "flash-attn==2.8.1", "causal-conv1d==1.5.2"]
+
 [tool.uv]
-no-build-isolation-package = ["flash-attn", "mamba_ssm", "causal_conv1d"]
+no-build-isolation-package = ["flash-attn", "mamba-ssm", "causal-conv1d"]
 
 [[tool.uv.index]]
-name = "nightly"
-url = "https://download.pytorch.org/whl/nightly/cu126"
+name = "stable"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
-torch = [{ index = "nightly" }]
-pytorch-triton = [{ index = "nightly" }]
+torch = [{ index = "stable" }]
+triton = [{ index = "stable" }]
+
+[[tool.uv.dependency-metadata]]
+name = "flash-attn"
+version = "2.8.1"
+requires-dist = ["torch", "einops"]
