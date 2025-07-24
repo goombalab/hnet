@@ -20,9 +20,52 @@ def dump_one(txt: str):
 def dump_few(ls: list[str]): [dump_one(s) for s in ls]
 def dump_fineweb_to_disk():
     batches, total = grab_fineweb()
-    from multiprocessing import Pool
-    g = (batch['text'].to_pylist() for batch in tqdm(batches, total=total/1024))
-    with Pool(32) as p: p.map(dump_few, g)
+    import queue
+    import threading
+    
+    def producer(q, progress_bar):
+        """Load batches one at a time, put individual texts in queue"""
+        for batch in batches:
+            texts = batch['text'].to_pylist()
+            for text in texts:
+                q.put(text)
+            progress_bar.update(1)
+            del texts, batch  # explicit cleanup
+        # Signal end to consumers
+        for _ in range(4):  # number of consumer threads
+            q.put(None)
+    
+    def consumer(q):
+        """Take texts from queue and process them"""
+        while True:
+            text = q.get()
+            if text is None:  # end signal
+                q.task_done()
+                break
+            dump_one(text)
+            q.task_done()
+    
+    # Create bounded queue to limit memory usage
+    q = queue.Queue(maxsize=50)  # max 50 documents buffered
+    
+    # Create progress bar
+    progress_bar = tqdm(total=total/1024, desc="Processing batches")
+    
+    # Start producer and consumers
+    producer_thread = threading.Thread(target=producer, args=(q, progress_bar))
+    consumer_threads = [threading.Thread(target=consumer, args=(q,)) for _ in range(4)]
+    
+    producer_thread.start()
+    for t in consumer_threads:
+        t.start()
+    
+    # Wait for completion
+    producer_thread.join()
+    q.join()  # wait for all tasks to be done
+    for t in consumer_threads:
+        t.join()
+    
+    progress_bar.close()
 
 
 def iter_fineweb_by_seqlen():
