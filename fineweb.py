@@ -1,8 +1,11 @@
+from os import sched_getaffinity
 from tqdm import tqdm
 from pathlib import Path
 from hashlib import sha256
 from pyarrow import dataset as ds
 from huggingface_hub import snapshot_download
+from queue import Queue
+from threading import Thread
 
 OUTPUT_DIR = Path("./10BT")
 def grab_fineweb():
@@ -17,54 +20,32 @@ def dump_one(txt: str):
     p   = OUTPUT_DIR / str(len(raw))
     p.mkdir(parents=True, exist_ok=True)
     (p / f"{sha256(raw).hexdigest()}.txt").write_bytes(raw)
-def dump_few(ls: list[str]): [dump_one(s) for s in ls]
-def dump_fineweb_to_disk():
+def dump_fineweb_to_disk(consumers: int=len(sched_getaffinity(0))):
     batches, total = grab_fineweb()
-    import queue
-    import threading
+    qsize = consumers * 4
+    bsz = qsize * 16
     
-    def producer(q, progress_bar):
-        """Load batches one at a time, put individual texts in queue"""
+    def producer(q, pbar):
         for batch in batches:
-            texts = batch['text'].to_pylist()
-            for text in texts:
-                q.put(text)
-            progress_bar.update(1)
-            del texts, batch  # explicit cleanup
-        # Signal end to consumers
-        for _ in range(4):  # number of consumer threads
-            q.put(None)
-    
+            for s in batch['text'].to_pylist(): q.put(s)
+            pbar.update(1)
+        for _ in range(consumers): q.put(None)
     def consumer(q):
-        """Take texts from queue and process them"""
-        while True:
-            text = q.get()
-            if text is None:  # end signal
-                q.task_done()
-                break
+        while text := q.get():
             dump_one(text)
             q.task_done()
+        q.task_done()
     
-    # Create bounded queue to limit memory usage
-    q = queue.Queue(maxsize=50)  # max 50 documents buffered
-    
-    # Create progress bar
-    progress_bar = tqdm(total=total/1024, desc="Processing batches")
-    
-    # Start producer and consumers
-    producer_thread = threading.Thread(target=producer, args=(q, progress_bar))
-    consumer_threads = [threading.Thread(target=consumer, args=(q,)) for _ in range(4)]
-    
-    producer_thread.start()
-    for t in consumer_threads:
-        t.start()
-    
-    # Wait for completion
-    producer_thread.join()
-    q.join()  # wait for all tasks to be done
-    for t in consumer_threads:
-        t.join()
-    
+    q = Queue(maxsize=qsize)
+    progress_bar = tqdm(total=total/bsz, desc="Processing batches")
+
+    threads = [
+        Thread(target=producer, args=(q, progress_bar)), # producer
+        *[Thread(target=consumer, args=(q,)) for _ in range(consumers)]
+    ]
+    for t in threads: t.start()
+    q.join()
+    for t in threads: t.join()
     progress_bar.close()
 
 
