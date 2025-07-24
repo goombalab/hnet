@@ -1,8 +1,11 @@
+from os import sched_getaffinity
 from tqdm import tqdm
 from pathlib import Path
 from hashlib import sha256
 from pyarrow import dataset as ds
 from huggingface_hub import snapshot_download
+from queue import Queue
+from threading import Thread
 
 OUTPUT_DIR = Path("./10BT")
 def grab_fineweb():
@@ -17,12 +20,33 @@ def dump_one(txt: str):
     p   = OUTPUT_DIR / str(len(raw))
     p.mkdir(parents=True, exist_ok=True)
     (p / f"{sha256(raw).hexdigest()}.txt").write_bytes(raw)
-def dump_few(ls: list[str]): [dump_one(s) for s in ls]
-def dump_fineweb_to_disk():
+def dump_fineweb_to_disk(consumers: int=len(sched_getaffinity(0))):
     batches, total = grab_fineweb()
-    from multiprocessing import Pool
-    g = (batch['text'].to_pylist() for batch in tqdm(batches, total=total/1024))
-    with Pool(32) as p: p.map(dump_few, g)
+    qsize = consumers * 4
+    bsz = qsize * 16
+    
+    def producer(q, pbar):
+        for batch in batches:
+            for s in batch['text'].to_pylist(): q.put(s)
+            pbar.update(1)
+        for _ in range(consumers): q.put(None)
+    def consumer(q):
+        while text := q.get():
+            dump_one(text)
+            q.task_done()
+        q.task_done()
+    
+    q = Queue(maxsize=qsize)
+    progress_bar = tqdm(total=total/bsz, desc="Processing batches")
+
+    threads = [
+        Thread(target=producer, args=(q, progress_bar)), # producer
+        *[Thread(target=consumer, args=(q,)) for _ in range(consumers)]
+    ]
+    for t in threads: t.start()
+    q.join()
+    for t in threads: t.join()
+    progress_bar.close()
 
 
 def iter_fineweb_by_seqlen():
