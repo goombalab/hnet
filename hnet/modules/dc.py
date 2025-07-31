@@ -74,7 +74,7 @@ class RoutingModule(nn.Module):
         if inference_params is not None:
             assert (
                 mask is not None
-            ), "Mask must be provided if inference_params is not provided"
+            ), "Mask must be provided if inference_params is provided"
             assert (
                 ~inference_params.has_seen_tokens
             ).all(), "Cannot have seen tokens when inference_params is not provided"
@@ -245,10 +245,10 @@ class DeChunkLayer(nn.Module):
         inference_params=None,
         mask=None,
     ):
-        if inference_params is None:
+        if inference_params is not None:
             assert (
                 mask is not None
-            ), "Mask must be provided if inference_params is not provided"
+            ), "Mask must be provided if inference_params is provided"
             assert boundary_mask[
                 :, 0
             ].all(), "First token must be a boundary if running prefill"
