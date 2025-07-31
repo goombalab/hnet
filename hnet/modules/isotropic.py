@@ -68,6 +68,9 @@ class Isotropic(nn.Module):
         layers = []
         layer_idx = 0
         self.arch_full = []
+
+        # self.height counts the number of things that get added to the residual stream
+        self.height = 0
         for arch, n_layer in layout_parse:
             assert arch in ("m", "M", "t", "T")
             assert n_layer.isdigit()
@@ -83,6 +86,10 @@ class Isotropic(nn.Module):
                 )
                 for i in range(int(n_layer))
             ]
+            if arch.islower():
+                self.height += int(n_layer)
+            else:
+                self.height += 2 * int(n_layer)
             self.arch_full.extend([arch for _ in range(int(n_layer))])
             layer_idx += int(n_layer)
 

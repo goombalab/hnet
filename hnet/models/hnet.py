@@ -12,6 +12,7 @@ from hnet.modules.dc import (
     RoutingModuleState,
     DeChunkState,
 )
+from hnet.modules.utils import apply_optimization_params
 
 from .config_hnet import HNetConfig
 
@@ -104,6 +105,7 @@ class HNet(nn.Module):
             )
             nn.init.zeros_(self.residual_proj.weight)
             self.residual_proj.weight._no_reinit = True
+
             self.residual_func = lambda out, residual, p: out * ste_func(p) + residual
 
         if stage_idx > 0 and self.d_model - config.d_model[stage_idx - 1] > 0:
@@ -114,6 +116,47 @@ class HNet(nn.Module):
             )
         else:
             self.pad_dimension = None
+    
+
+    def _init_weights(self, initializer_range: float = 0.02, parent_residuals: int = 0) -> None:
+        n_residuals = parent_residuals
+        if self.is_innermost:
+            n_residuals += self.main_network.height
+            for name, m in self.main_network.named_modules():
+                if isinstance(m, nn.Linear) and not getattr(m.weight, "_no_reinit", False):
+                    if "out_proj" in name or "fc2" in name:
+                        nn.init.normal_(m.weight, mean=0.0, std=initializer_range / (n_residuals ** 0.5))
+                    else:
+                        nn.init.normal_(m.weight, mean=0.0, std=initializer_range)
+
+        else:
+            n_residuals += self.encoder.height + self.decoder.height
+            for name, m in self.encoder.named_modules():
+                if isinstance(m, nn.Linear) and not getattr(m.weight, "_no_reinit", False):
+                    if "out_proj" in name or "fc2" in name:
+                        nn.init.normal_(m.weight, mean=0.0, std=initializer_range / (n_residuals ** 0.5))
+                    else:
+                        nn.init.normal_(m.weight, mean=0.0, std=initializer_range)
+            for name, m in self.decoder.named_modules():
+                if isinstance(m, nn.Linear) and not getattr(m.weight, "_no_reinit", False):
+                    if "out_proj" in name or "fc2" in name:
+                        nn.init.normal_(m.weight, mean=0.0, std=initializer_range / (n_residuals ** 0.5))
+                    else:
+                        nn.init.normal_(m.weight, mean=0.0, std=initializer_range)
+                    
+            self.main_network._init_weights(initializer_range, n_residuals)
+    
+
+    def _apply_lr_multiplier(self, lr_multiplier: list[float]) -> None:
+        """
+        Applies the learning rate multipliers to the parameters of the model.
+        """
+        # a little stupid: we apply lr_multiplier to all parameters, and then for the main stage (which may have another hierarchy), we just apply it again there.
+        for param in self.parameters():
+            apply_optimization_params(param, lr_multiplier=lr_multiplier[self.stage_idx])
+        
+        if not self.is_innermost:
+            self.main_network._apply_lr_multiplier(lr_multiplier)
 
     def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None):
         """
