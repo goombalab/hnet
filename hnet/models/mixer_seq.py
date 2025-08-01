@@ -10,7 +10,7 @@ from .hnet import HNet, HNetState
 from .config_hnet import HNetConfig
 
 from hnet.modules.dc import RoutingModuleOutput
-
+from hnet.modules.utils import apply_optimization_params
 
 @dataclass
 class CausalLMOutput:
@@ -51,6 +51,29 @@ class HNetForCausalLM(nn.Module, GenerationMixin):
     def tie_weights(self):
         if self.config.tie_embeddings:
             self.lm_head.weight = self.embeddings.weight
+    
+    def init_weights(self, initializer_range: float = 0.02) -> None:
+        """
+        Initializes the weights of the model.
+        """
+        nn.init.normal_(self.lm_head.weight, mean=0.0, std=initializer_range)
+        # embeddings are initialized differently from linears
+        nn.init.normal_(self.embeddings.weight, mean=0.0, std=1.0)
+        self.backbone._init_weights(initializer_range)
+
+    def apply_lr_multiplier(self, lr_multiplier: list[float]) -> None:
+        """
+        Applies the learning rate multipliers to the parameters of the model.
+        NOTE: Must be ran before creating parameter groups, see hnet.utils.train.group_params for an example on how to run parameter groups.
+
+        Inputs:
+            lr_multiplier: A list of learning rate multipliers, one for each stage of the hierarchy, with the outer stages first (e.g. [3.0, 1.7, 0.9]).
+        """
+        for param in self.embeddings.parameters():
+            apply_optimization_params(param, lr_multiplier=lr_multiplier[0])
+        for param in self.lm_head.parameters():
+            apply_optimization_params(param, lr_multiplier=lr_multiplier[0])
+        self.backbone._apply_lr_multiplier(lr_multiplier)
 
     def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None, **kwargs):
         return self.backbone.allocate_inference_cache(
