@@ -66,25 +66,18 @@ class HnetForCausalLm(Module, GenerationMixin):
     )
 
   def forward(
-    self,
-    tokens: Tensor,
-    inference_params: HNetState,
-    mask: Tensor,
+    self, tokens: Tensor, inference_params: HNetState, mask: Tensor
   ) -> CausalLmOutput:
     """
     num_last_tokens: if > 0, only return the logits for the last n tokens
     """
     hidden_states = self.embeddings.forward(tokens)
 
-    B, L, D = hidden_states.shape
-
     hidden_states, bpred_output = self.backbone.forward(
       hidden_states,
       mask=mask,
       inference_params=inference_params,
     )
-
-    hidden_states = hidden_states.view(B, L, D)
 
     lm_logits = self.lm_head.forward(hidden_states)
 
