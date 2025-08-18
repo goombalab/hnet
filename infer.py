@@ -77,11 +77,8 @@ def main():
     decoded = None
     res = None
     for j in range(1, min(len(buf), 4)):
-      try:
-        res = tokenizer.decode(buf[:j])
-        decoded = j
-      except:
-        pass
+      res = tokenizer.decode(buf[:j])
+      decoded = j
 
     if res is not None:
       print(res, end="", flush=True)
