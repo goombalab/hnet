@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from flash_attn.utils.generation import GenerationMixin
 from omegaconf import ListConfig
 from torch import Tensor, arange, dtype, int, load, serialization, tensor
+from torch._prims_common import DeviceLikeType
 from torch.nn import Linear, Module
 from torch.nn.modules.sparse import Embedding
 from typing_extensions import Self
-from torch._prims_common import DeviceLikeType
 
 from hnet.modules.dc import RoutingModuleOutput
 from lm.hnet import HNet, HNetState
@@ -68,7 +68,7 @@ class HnetForCausalLm(Module, GenerationMixin):
 
   def forward(
     self,
-    input_ids,
+    tokens,
     mask=None,
     position_ids=None,
     inference_params=None,
@@ -78,7 +78,7 @@ class HnetForCausalLm(Module, GenerationMixin):
     """
     num_last_tokens: if > 0, only return the logits for the last n tokens
     """
-    hidden_states = self.embeddings(input_ids)
+    hidden_states = self.embeddings.forward(tokens)
 
     B, L, D = hidden_states.shape
 
@@ -133,18 +133,19 @@ class HnetForCausalLm(Module, GenerationMixin):
 
     return self
 
-  def step(self, input_ids, inference_params):
-    B = input_ids.shape[0]
+  def step(self, token, inference_params):
+    B = token.shape[0]
     assert B == 1, (
       "HNetForCausalLM step currently only supports batch size 1 -- need to handle different-size lengths for each sample"
     )
 
-    hidden_states = self.embeddings(input_ids)
+    hidden_states = self.embeddings.forward(token)
 
     hidden_states, bpred_output = self.backbone.step(
-      hidden_states, inference_params
+      hidden_states,
+      inference_params,
     )
-    logits = self.lm_head(hidden_states)
+    logits = self.lm_head.forward(hidden_states)
 
     return CausalLmOutput(
       logits=logits,
