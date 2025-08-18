@@ -69,9 +69,7 @@ class HnetForCausalLm(Module, GenerationMixin):
     self,
     tokens: Tensor,
     mask: Tensor | None = None,
-    position_ids=None,
     inference_params: HNetState | None = None,
-    num_last_tokens=0,
     **mixer_kwargs,
   ) -> CausalLmOutput:
     """
@@ -80,10 +78,6 @@ class HnetForCausalLm(Module, GenerationMixin):
     hidden_states = self.embeddings.forward(tokens)
 
     B, L, D = hidden_states.shape
-
-    assert position_ids is None, (
-      "Position ids are not supported for HNet due to the subsampling hierarchical structure"
-    )
 
     if mask is None:
       # Absent a mask, we assume we are running in packed mode
@@ -108,8 +102,6 @@ class HnetForCausalLm(Module, GenerationMixin):
 
     hidden_states = hidden_states.view(B, L, D)
 
-    if num_last_tokens > 0:
-      hidden_states = hidden_states[:, -num_last_tokens:]
     lm_logits = self.lm_head.forward(hidden_states)
 
     assert inference_params is not None
