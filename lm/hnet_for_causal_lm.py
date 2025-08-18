@@ -22,7 +22,6 @@ class CausalLmOutput:
 
 @dataclass(eq=False)
 class HnetForCausalLm(Module, GenerationMixin):
-  config: HnetConfig
   embeddings: Embedding
   backbone: HNet
   lm_head: Linear
@@ -35,14 +34,17 @@ class HnetForCausalLm(Module, GenerationMixin):
   ) -> None:
     super().__init__()
 
-    self.config = config
-
-    vocab_size = self.config.vocab_size
-    d_embed = self.config.d_model[0]
+    vocab_size = config.vocab_size
+    d_model_0 = config.d_model[0]
 
     # We consider the HNet as a map (B, L, D[0]) -> (B, L, D[0])
     # Thus, the embedding is defined outside of the HNet.
-    self.embeddings = Embedding(vocab_size, d_embed, device=device, dtype=dtype)
+    self.embeddings = Embedding(
+      num_embeddings=vocab_size,
+      embedding_dim=d_model_0,
+      device=device,
+      dtype=dtype,
+    )
 
     self.backbone = HNet(
       config=config,
@@ -52,10 +54,16 @@ class HnetForCausalLm(Module, GenerationMixin):
       device=device,
       dtype=dtype,
     )
+
     self.lm_head = Linear(
-      d_embed, vocab_size, bias=False, device=device, dtype=dtype
+      in_features=d_model_0,
+      out_features=vocab_size,
+      bias=False,
+      device=device,
+      dtype=dtype,
     )
-    if self.config.tie_embeddings:
+
+    if config.tie_embeddings:
       self.lm_head.weight = self.embeddings.weight
 
   def allocate_inference_cache(
