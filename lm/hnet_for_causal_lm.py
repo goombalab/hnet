@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from flash_attn.utils.generation import GenerationMixin
 from omegaconf import ListConfig
-from torch import Tensor, arange, dtype, int, load, serialization, tensor
+from torch import Tensor, dtype, load, serialization
 from torch._prims_common import DeviceLikeType
 from torch.nn import Linear, Module
 from torch.nn.modules.sparse import Embedding
@@ -69,8 +69,7 @@ class HnetForCausalLm(Module, GenerationMixin):
     self,
     tokens: Tensor,
     inference_params: HNetState,
-    mask: Tensor | None = None,
-    **mixer_kwargs,
+    mask: Tensor,
   ) -> CausalLmOutput:
     """
     num_last_tokens: if > 0, only return the logits for the last n tokens
@@ -83,14 +82,12 @@ class HnetForCausalLm(Module, GenerationMixin):
       hidden_states,
       mask=mask,
       inference_params=inference_params,
-      **mixer_kwargs,
     )
 
     hidden_states = hidden_states.view(B, L, D)
 
     lm_logits = self.lm_head.forward(hidden_states)
 
-    assert inference_params is not None
     return CausalLmOutput(
       logits=lm_logits,
       bpred_output=bpred_output,
