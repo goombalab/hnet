@@ -1,5 +1,4 @@
 import torch
-from omegaconf import ListConfig
 from torch import bfloat16
 
 from lm.byte_tokenizer import ByteTokenizer
@@ -51,18 +50,11 @@ def main():
   max_tokens = 32
   temperature = 0.0001
 
-  config = HnetConfig.load(config_path)
-
   device = "cuda" if torch.cuda.is_available() else "cpu"
   dtype = bfloat16
 
-  model = HnetForCausalLm(config, device=device, dtype=dtype)
-  model.eval()
-
-  with torch.serialization.safe_globals([ListConfig]):
-    state_dict = torch.load(model_path, map_location=device, weights_only=False)
-  model.load_state_dict(state_dict)
-
+  config = HnetConfig.load(config_path)
+  model = HnetForCausalLm(config, device=device, dtype=dtype).load(model_path)
   tokenizer = ByteTokenizer()
 
   buf = []

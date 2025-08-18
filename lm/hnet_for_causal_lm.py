@@ -1,10 +1,12 @@
 from collections import namedtuple
 from dataclasses import dataclass
 
-# from flash_attn.utils.generation import GenerationMixin
-from torch import Tensor, arange, dtype, int, tensor
+from flash_attn.utils.generation import GenerationMixin
+from omegaconf import ListConfig
+from torch import Tensor, arange, dtype, int, load, serialization, tensor
 from torch.nn import Linear, Module
 from torch.nn.modules.sparse import Embedding
+from typing_extensions import Self
 
 from hnet.modules.dc import RoutingModuleOutput
 from lm.hnet import HNet, HNetState
@@ -19,7 +21,7 @@ class CausalLmOutput:
 
 
 @dataclass(eq=False)
-class HnetForCausalLm(Module):
+class HnetForCausalLm(Module, GenerationMixin):
   config: HnetConfig
   embeddings: Embedding
   backbone: HNet
@@ -118,6 +120,17 @@ class HnetForCausalLm(Module):
       bpred_output=bpred_output,
       inference_params=inference_params,
     )
+
+  def load(self, path: str) -> Self:
+    self.eval()
+
+    device = next(self.parameters()).device
+
+    with serialization.safe_globals([ListConfig]):
+      state_dict = load(path, map_location=device, weights_only=False)
+    self.load_state_dict(state_dict)
+
+    return self
 
   def step(self, input_ids, inference_params):
     B = input_ids.shape[0]
