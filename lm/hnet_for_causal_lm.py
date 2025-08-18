@@ -66,25 +66,25 @@ class HnetForCausalLm(Module, GenerationMixin):
     )
 
   def forward(
-    self, tokens: Tensor, inference_params: HNetState, mask: Tensor
+    self,
+    tokens: Tensor,
+    inference_params: HNetState,
+    mask: Tensor,
   ) -> CausalLmOutput:
-    """
-    num_last_tokens: if > 0, only return the logits for the last n tokens
-    """
     hidden_states = self.embeddings.forward(tokens)
 
     hidden_states, bpred_output = self.backbone.forward(
       hidden_states,
-      mask=mask,
       inference_params=inference_params,
+      mask=mask,
     )
 
-    lm_logits = self.lm_head.forward(hidden_states)
+    logits = self.lm_head.forward(hidden_states)
 
     return CausalLmOutput(
-      logits=lm_logits,
-      bpred_output=bpred_output,
-      inference_params=inference_params,
+      logits,
+      bpred_output,
+      inference_params,
     )
 
   def load(self, path: str) -> Self:
@@ -98,22 +98,22 @@ class HnetForCausalLm(Module, GenerationMixin):
 
     return self
 
-  def step(self, token: Tensor, inference_params: HNetState) -> CausalLmOutput:
-    B = token.shape[0]
-    assert B == 1, (
-      "HNetForCausalLM step currently only supports batch size 1 -- need to handle different-size lengths for each sample"
-    )
-
+  def step(
+    self,
+    token: Tensor,
+    inference_params: HNetState,
+  ) -> CausalLmOutput:
     hidden_states = self.embeddings.forward(token)
 
     hidden_states, bpred_output = self.backbone.step(
       hidden_states,
-      inference_params,
+      inference_params=inference_params,
     )
+
     logits = self.lm_head.forward(hidden_states)
 
     return CausalLmOutput(
-      logits=logits,
-      bpred_output=bpred_output,
-      inference_params=inference_params,
+      logits,
+      bpred_output,
+      inference_params,
     )
