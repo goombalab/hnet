@@ -1,5 +1,4 @@
-import torch
-from torch import bfloat16
+from torch import bfloat16, bool, cuda, long, multinomial, ones, softmax, tensor
 
 from lm.byte_tokenizer import ByteTokenizer
 from lm.hnet_config import HnetConfig
@@ -7,7 +6,7 @@ from lm.hnet_for_causal_lm import HnetForCausalLm
 
 
 def generate(
-  model,
+  model: HnetForCausalLm,
   prompt: str,
   max_tokens: int = 1024,
   temperature: float = 1.0,
@@ -16,22 +15,20 @@ def generate(
   tokenizer = ByteTokenizer()
 
   encoded = tokenizer.encode(prompt, add_bos=True)
-  input_ids = torch.tensor(encoded, dtype=torch.long, device=device).unsqueeze(
-    0
-  )
+  input_ids = tensor(encoded, dtype=long, device=device).unsqueeze(0)
 
   inference_cache = model.allocate_inference_cache(
-    1, input_ids.shape[1] + max_tokens, dtype=torch.bfloat16
+    1, input_ids.shape[1] + max_tokens, dtype=bfloat16
   )
 
-  mask = torch.ones(input_ids.shape, device=device, dtype=torch.bool)
+  mask = ones(input_ids.shape, device=device, dtype=bool)
   output = model.forward(input_ids, mask=mask, inference_params=inference_cache)
 
   logits = output.logits[0, -1, :] / temperature
 
   for _ in range(max_tokens):
-    probs = torch.softmax(logits, dim=-1)
-    next_token = torch.multinomial(probs, 1)
+    probs = softmax(logits, dim=-1)
+    next_token = multinomial(probs, 1)
 
     if next_token.item() == tokenizer.eos_idx:
       break
@@ -50,31 +47,31 @@ def main():
   max_tokens = 32
   temperature = 0.0001
 
-  device = "cuda" if torch.cuda.is_available() else "cpu"
+  device = "cuda" if cuda.is_available() else "cpu"
   dtype = bfloat16
 
   config = HnetConfig.load(config_path)
   model = HnetForCausalLm(config, device=device, dtype=dtype).load(model_path)
   tokenizer = ByteTokenizer()
 
-  buf = []
+  tokens = []
   for token in generate(
     model,
     prompt,
-    max_tokens=max_tokens,
-    temperature=temperature,
+    max_tokens,
+    temperature,
   ):
-    buf.append(token)
+    tokens.append(token)
 
     decoded = None
-    res = None
-    for j in range(1, min(len(buf), 4)):
-      res = tokenizer.decode(buf[:j])
-      decoded = j
+    size = None
+    for i in range(1, min(len(tokens), 4)):
+      decoded = tokenizer.decode(tokens[:i])
+      size = i
 
-    if res is not None:
-      print(res, end="", flush=True)
-      buf = buf[decoded:]
+    if decoded is not None:
+      print(decoded, end="", flush=True)
+      tokens = tokens[size:]
 
 
 main()
