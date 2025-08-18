@@ -8,25 +8,26 @@ from lm.hnet_for_causal_lm import HnetForCausalLm
 def generate(
   model: HnetForCausalLm,
   prompt: str,
-  max_tokens: int = 1024,
+  max_token: int = 1024,
   temperature: float = 1.0,
 ):
   device = next(model.parameters()).device
   tokenizer = ByteTokenizer()
 
-  encoded = tokenizer.encode(prompt, add_bos=True)
-  input_ids = tensor(encoded, dtype=long, device=device).unsqueeze(0)
+  tokens = tokenizer.encode(prompt, add_bos=True)
+  tokens_t = tensor(tokens, dtype=long, device=device).unsqueeze(0)
 
-  inference_cache = model.allocate_inference_cache(
-    1, input_ids.shape[1] + max_tokens, dtype=bfloat16
+  cache = model.allocate_inference_cache(
+    batch_size=1,
+    max_seqlen=tokens_t.shape[1] + max_token,
+    dtype=bfloat16,
   )
 
-  mask = ones(input_ids.shape, device=device, dtype=bool)
-  output = model.forward(input_ids, mask=mask, inference_params=inference_cache)
-
+  mask = ones(tokens_t.shape, device=device, dtype=bool)
+  output = model.forward(tokens_t, mask, inference_params=cache)
   logits = output.logits[0, -1, :] / temperature
 
-  for _ in range(max_tokens):
+  for _ in range(max_token):
     probs = softmax(logits, dim=-1)
     next_token = multinomial(probs, 1)
 
@@ -36,7 +37,7 @@ def generate(
     current_token = next_token.unsqueeze(0)
     yield current_token
 
-    output = model.step(current_token, inference_cache)
+    output = model.step(current_token, cache)
     logits = output.logits[0, -1, :] / temperature
 
 

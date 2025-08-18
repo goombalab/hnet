@@ -7,6 +7,7 @@ from torch import Tensor, arange, dtype, int, load, serialization, tensor
 from torch.nn import Linear, Module
 from torch.nn.modules.sparse import Embedding
 from typing_extensions import Self
+from torch._prims_common import DeviceLikeType
 
 from hnet.modules.dc import RoutingModuleOutput
 from lm.hnet import HNet, HNetState
@@ -30,7 +31,7 @@ class HnetForCausalLm(Module, GenerationMixin):
   def __init__(
     self,
     config: HnetConfig,
-    device: str | None = None,
+    device: DeviceLikeType | None = None,
     dtype: dtype | None = None,
   ) -> None:
     super().__init__()
