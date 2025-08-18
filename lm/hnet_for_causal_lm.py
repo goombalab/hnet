@@ -1,4 +1,3 @@
-from collections import namedtuple
 from dataclasses import dataclass
 
 from flash_attn.utils.generation import GenerationMixin
@@ -68,13 +67,13 @@ class HnetForCausalLm(Module, GenerationMixin):
 
   def forward(
     self,
-    tokens,
-    mask=None,
+    tokens: Tensor,
+    mask: Tensor | None = None,
     position_ids=None,
-    inference_params=None,
+    inference_params: HNetState | None = None,
     num_last_tokens=0,
     **mixer_kwargs,
-  ):
+  ) -> CausalLmOutput:
     """
     num_last_tokens: if > 0, only return the logits for the last n tokens
     """
@@ -98,7 +97,7 @@ class HnetForCausalLm(Module, GenerationMixin):
       cu_seqlens = None
       max_seqlen = None
 
-    hidden_states, bpred_output = self.backbone(
+    hidden_states, bpred_output = self.backbone.forward(
       hidden_states,
       cu_seqlens=cu_seqlens,
       max_seqlen=max_seqlen,
@@ -111,12 +110,10 @@ class HnetForCausalLm(Module, GenerationMixin):
 
     if num_last_tokens > 0:
       hidden_states = hidden_states[:, -num_last_tokens:]
-    lm_logits = self.lm_head(hidden_states)
+    lm_logits = self.lm_head.forward(hidden_states)
 
-    CausalLMOutput = namedtuple(
-      "CausalLMOutput", ["logits", "bpred_output", "inference_params"]
-    )
-    return CausalLMOutput(
+    assert inference_params is not None
+    return CausalLmOutput(
       logits=lm_logits,
       bpred_output=bpred_output,
       inference_params=inference_params,
@@ -133,7 +130,7 @@ class HnetForCausalLm(Module, GenerationMixin):
 
     return self
 
-  def step(self, token, inference_params):
+  def step(self, token: Tensor, inference_params: HNetState) -> CausalLmOutput:
     B = token.shape[0]
     assert B == 1, (
       "HNetForCausalLM step currently only supports batch size 1 -- need to handle different-size lengths for each sample"
