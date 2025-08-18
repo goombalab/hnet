@@ -68,8 +68,8 @@ class HnetForCausalLm(Module, GenerationMixin):
   def forward(
     self,
     tokens: Tensor,
+    inference_params: HNetState,
     mask: Tensor | None = None,
-    inference_params: HNetState | None = None,
     **mixer_kwargs,
   ) -> CausalLmOutput:
     """
@@ -79,22 +79,8 @@ class HnetForCausalLm(Module, GenerationMixin):
 
     B, L, D = hidden_states.shape
 
-    if mask is None:
-      # Absent a mask, we assume we are running in packed mode
-      assert inference_params is None, (
-        "Inference params are not supported in packed mode"
-      )
-      hidden_states = hidden_states.flatten(0, 1)
-      cu_seqlens = arange(B + 1, device=hidden_states.device) * L
-      max_seqlen = tensor(L, dtype=int, device=hidden_states.device)
-    else:
-      cu_seqlens = None
-      max_seqlen = None
-
     hidden_states, bpred_output = self.backbone.forward(
       hidden_states,
-      cu_seqlens=cu_seqlens,
-      max_seqlen=max_seqlen,
       mask=mask,
       inference_params=inference_params,
       **mixer_kwargs,

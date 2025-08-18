@@ -24,7 +24,7 @@ def generate(
   )
 
   mask = ones(tokens.shape, device=device, dtype=bool)
-  output = model.forward(tokens, mask, inference_params=cache)
+  output = model.forward(tokens, inference_params=cache, mask=mask)
   logits = output.logits[0, -1, :] / temperature
 
   for _ in range(max_token):
