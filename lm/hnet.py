@@ -34,9 +34,9 @@ def ste_func(x: Tensor):
 
 @dataclass
 class HnetState:
+  main_network_state: Self | IsotropicInferenceParams
   encoder_state: IsotropicInferenceParams | None = None
   routing_module_state: RoutingModuleState | None = None
-  main_network_state: Self | IsotropicInferenceParams | None = None
   dechunk_state: DeChunkState | None = None
   decoder_state: IsotropicInferenceParams | None = None
 
@@ -120,14 +120,19 @@ class Hnet(Module):
     else:
       self.pad_dimension = None
 
-  def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None):
+  def allocate_inference_cache(
+    self,
+    batch_size: int,
+    max_seqlen: int,
+    dtype: dtype,
+  ):
     """
     Allocate the inference cache for the HNet.
 
     Arguments:
-        batch_size: int. The number of sequences in the batch.
-        max_seqlen: int. The maximum sequence length in the batch.
-        dtype: torch.dtype. The dtype of the inference cache.
+        batch_size: The number of sequences in the batch.
+        max_seqlen: The maximum sequence length in the batch.
+        dtype: The dtype of the inference cache.
 
     The structure of the inference cache is as follows:
         - [encoder state]
@@ -153,14 +158,14 @@ class Hnet(Module):
       )
       device = self.residual_proj.weight.device
       return HnetState(
+        main_network_state=self.main_network.allocate_inference_cache(
+          batch_size, max_seqlen, dtype=dtype
+        ),
         encoder_state=self.encoder.allocate_inference_cache(
           batch_size, max_seqlen, dtype=dtype
         ),
         routing_module_state=self.routing_module.allocate_inference_cache(
           batch_size, max_seqlen, device, dtype=dtype
-        ),
-        main_network_state=self.main_network.allocate_inference_cache(
-          batch_size, max_seqlen, dtype=dtype
         ),
         dechunk_state=self.dechunk_layer.allocate_inference_cache(
           batch_size, max_seqlen, device, dtype=dtype

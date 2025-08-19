@@ -4,9 +4,9 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import optree
-import torch
-import torch.nn as nn
 from flash_attn.ops.triton.layer_norm import RMSNorm
+from torch import Tensor, dtype
+from torch.nn import Module, ModuleList
 
 from hnet.modules.block import create_block
 from hnet.modules.utils import get_stage_cfg
@@ -23,7 +23,7 @@ class IsotropicInferenceParams:
   seqlen_offset: int = 0
   batch_size_offset: int = 0
   key_value_memory_dict: dict = field(default_factory=dict)
-  lengths_per_sample: Optional[torch.Tensor] = None
+  lengths_per_sample: Optional[Tensor] = None
 
   def reset(self, max_seqlen, max_batch_size):
     self.max_seqlen = max_seqlen
@@ -33,12 +33,12 @@ class IsotropicInferenceParams:
       self.lengths_per_sample.zero_()
 
     optree.tree_map(
-      lambda x: x.zero_() if isinstance(x, torch.Tensor) else x,
+      lambda x: x.zero_() if isinstance(x, Tensor) else x,
       self.key_value_memory_dict,
     )
 
 
-class Isotropic(nn.Module):
+class Isotropic(Module):
   def __init__(
     self,
     config: HnetConfig,
@@ -82,25 +82,32 @@ class Isotropic(nn.Module):
       self.arch_full.extend([arch for _ in range(int(n_layer))])
       layer_idx += int(n_layer)
 
-    self.layers = nn.ModuleList(layers)
+    self.layers = ModuleList(layers)
 
     self.rmsnorm = RMSNorm(self.d_model, eps=1e-5, **factory_kwargs)
 
-  def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None):
+  def allocate_inference_cache(
+    self,
+    batch_size: int,
+    max_seqlen: int,
+    dtype: dtype,
+  ):
     """
     Allocate the inference cache for the Isotropic module.
 
     Arguments:
-        batch_size: int. The number of sequences in the batch.
-        max_seqlen: int. The maximum sequence length in the batch, not used for this module.
-        dtype: torch.dtype. The dtype of the inference cache.
+        batch_size: The number of sequences in the batch.
+        max_seqlen: The maximum sequence length in the batch, not used for this module.
+        dtype: The dtype of the inference cache.
 
     The inference cache contains a list of inference caches, one for each block.
     """
     key_value_memory_dict = {}
     for i, layer in enumerate(self.layers):
       key_value_memory_dict[i] = layer.allocate_inference_cache(
-        batch_size, max_seqlen, dtype=dtype
+        batch_size,
+        max_seqlen,
+        dtype=dtype,
       )
     return IsotropicInferenceParams(
       key_value_memory_dict=key_value_memory_dict,

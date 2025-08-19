@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 
-from flash_attn.utils.generation import GenerationMixin
 from omegaconf import ListConfig
 from torch import Tensor, dtype, load, serialization
 from torch._prims_common import DeviceLikeType
@@ -21,7 +20,7 @@ class CausalLmOutput:
 
 
 @dataclass(eq=False)
-class HnetForCausalLm(Module, GenerationMixin):
+class HnetForCausalLm(Module):
   embeddings: Embedding
   backbone: Hnet
   lm_head: Linear
@@ -67,10 +66,15 @@ class HnetForCausalLm(Module, GenerationMixin):
       self.lm_head.weight = self.embeddings.weight
 
   def allocate_inference_cache(
-    self, batch_size, max_seqlen, dtype=None, **kwargs
+    self,
+    batch_size: int,
+    max_seqlen: int,
+    dtype: dtype,
   ):
     return self.backbone.allocate_inference_cache(
-      batch_size, max_seqlen, dtype=dtype, **kwargs
+      batch_size,
+      max_seqlen,
+      dtype,
     )
 
   def forward(
