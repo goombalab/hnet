@@ -1,33 +1,50 @@
-# Base code imported from
-# https://github.com/state-spaces/mamba
-import torch.nn as nn
-import torch.nn.functional as F
-
 from flash_attn.ops.activations import swiglu
+from torch import dtype
+from torch._prims_common import DeviceLikeType
+from torch.nn import Linear, Module
 
 
-class SwiGLU(nn.Module):
-    def __init__(
-        self,
-        d_model,
-        d_intermediate=None,
-        bias=False,
-        multiple_of=128,
-        device=None,
-        dtype=None,
-    ):
-        factory_kwargs = {"device": device, "dtype": dtype}
-        super().__init__()
-        d_intermediate = (
-            d_intermediate if d_intermediate is not None else int(8 * d_model / 3)
-        )
-        d_intermediate = (d_intermediate + multiple_of - 1) // multiple_of * multiple_of
-        self.fc1 = nn.Linear(d_model, 2 * d_intermediate, bias=bias, **factory_kwargs)
-        self.fc2 = nn.Linear(d_intermediate, d_model, bias=bias, **factory_kwargs)
+class SwiGLU(Module):
+  fc1: Linear
+  fc2: Linear
 
-    def forward(self, x):
-        y = self.fc1(x)
-        y, gate = y.chunk(2, dim=-1)
-        y = swiglu(gate, y)
-        y = self.fc2(y)
-        return y
+  def __init__(
+    self,
+    d_model: int,
+    d_intermediate: int | None = None,
+    bias: bool = False,
+    multiple_of: int = 128,
+    device: DeviceLikeType | None = None,
+    dtype: dtype | None = None,
+  ):
+    super().__init__()
+
+    d_intermediate = (
+      d_intermediate if d_intermediate is not None else int(8 * d_model / 3)
+    )
+    d_intermediate = (
+      (d_intermediate + multiple_of - 1) // multiple_of * multiple_of
+    )
+
+    self.fc1 = Linear(
+      in_features=d_model,
+      out_features=2 * d_intermediate,
+      bias=bias,
+      device=device,
+      dtype=dtype,
+    )
+
+    self.fc2 = Linear(
+      in_features=d_intermediate,
+      out_features=d_model,
+      bias=bias,
+      device=device,
+      dtype=dtype,
+    )
+
+  def forward(self, x):
+    y = self.fc1(x)
+    y, gate = y.chunk(2, dim=-1)
+    y = swiglu(gate, y)
+    y = self.fc2(y)
+    return y

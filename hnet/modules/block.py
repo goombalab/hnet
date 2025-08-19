@@ -1,11 +1,10 @@
-# Base code imported from
-# https://github.com/state-spaces/mamba
-from functools import partial
 from typing import Optional
 
 from flash_attn.ops.triton.layer_norm import RMSNorm
 from mamba_ssm.modules.mamba2 import Mamba2
-from torch import Tensor, nn
+from torch import Tensor, dtype
+from torch._prims_common import DeviceLikeType
+from torch.nn import Module
 
 from .mha import CausalMHA
 from .mlp import SwiGLU
@@ -31,27 +30,28 @@ class Mamba2Wrapper(Mamba2):
     return result
 
 
-class Block(nn.Module):
+class Block(Module):
+  mixer: CausalMHA | Mamba2Wrapper
+  mlp: SwiGLU | None
+  norm1: RMSNorm
+  norm2: RMSNorm | None
+  residual_in_fp32: bool
+
   def __init__(
     self,
-    d_model,
-    mixer_cls=None,
-    mlp_cls=None,
-    norm_cls=None,
-    residual_in_fp32=True,
+    mixer: CausalMHA | Mamba2Wrapper,
+    mlp: SwiGLU | None,
+    norm1: RMSNorm,
+    norm2: RMSNorm | None = None,
+    residual_in_fp32: bool = True,
   ):
     super().__init__()
-    self.residual_in_fp32 = residual_in_fp32
-    self.norm1 = norm_cls(d_model)
-    self.mixer = mixer_cls(d_model)
-    if mlp_cls is not nn.Identity:
-      self.norm2 = norm_cls(d_model)
-      self.mlp = mlp_cls(d_model)
-    else:
-      self.mlp = None
 
-    assert RMSNorm is not None, "Triton is not installed"
-    assert isinstance(self.norm1, RMSNorm), "Only RMSNorm is supported"
+    self.residual_in_fp32 = residual_in_fp32
+    self.norm1 = norm1
+    self.mixer = mixer
+    self.mlp = mlp
+    self.norm2 = norm2
 
   def forward(
     self,
@@ -114,51 +114,59 @@ class Block(nn.Module):
 
 
 def create_block(
-  arch,
-  d_model,
-  d_intermediate=None,
-  ssm_cfg=dict(),
-  attn_cfg=dict(),
-  norm_epsilon=1e-5,
-  layer_idx=None,
-  residual_in_fp32=True,
-  device=None,
-  dtype=None,
+  arch: str,
+  d_model: int,
+  d_intermediate: int | None = None,
+  ssm_cfg: dict = dict(),
+  attn_cfg: dict = dict(),
+  norm_epsilon: float = 1e-5,
+  layer_idx: int | None = None,
+  residual_in_fp32: bool = True,
+  device: DeviceLikeType | None = None,
+  dtype: dtype | None = None,
 ):
-  factory_kwargs = {"device": device, "dtype": dtype}
-
-  # Mixer
   if arch in ("t", "T"):
-    mixer_cls = partial(
-      CausalMHA, **attn_cfg, **factory_kwargs, layer_idx=layer_idx
+    mixer = CausalMHA(
+      d_model,
+      **attn_cfg,
+      layer_idx=layer_idx,
+      device=device,
+      dtype=dtype,
     )
   elif arch in ("m", "M"):
-    mixer_cls = partial(
-      Mamba2Wrapper, **ssm_cfg, **factory_kwargs, layer_idx=layer_idx
+    mixer = Mamba2Wrapper(
+      d_model,
+      **ssm_cfg,
+      layer_idx=layer_idx,
+      device=device,
+      dtype=dtype,
     )
   else:
     raise NotImplementedError
 
-  # MLP
   if arch in ("T", "M"):
-    mlp_cls = partial(
-      SwiGLU,
-      d_intermediate=d_intermediate,
-      **factory_kwargs,
+    mlp = SwiGLU(
+      d_model,
+      d_intermediate,
+      device=device,
+      dtype=dtype,
     )
   elif arch in ("t", "m"):
-    mlp_cls = nn.Identity
+    mlp = None
   else:
     raise NotImplementedError
 
-  # Normalization
-  norm_cls = partial(RMSNorm, eps=norm_epsilon, **factory_kwargs)
-
-  block = Block(
-    d_model,
-    mixer_cls,
-    mlp_cls,
-    norm_cls=norm_cls,
-    residual_in_fp32=residual_in_fp32,
+  norm1 = RMSNorm(d_model, eps=norm_epsilon, device=device, dtype=dtype)
+  norm2 = (
+    RMSNorm(d_model, eps=norm_epsilon, device=device, dtype=dtype)
+    if isinstance(mlp, SwiGLU)
+    else None
   )
-  return block
+
+  return Block(
+    mixer,
+    mlp,
+    norm1,
+    norm2,
+    residual_in_fp32,
+  )

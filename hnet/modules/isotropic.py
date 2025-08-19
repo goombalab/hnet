@@ -75,7 +75,8 @@ class Isotropic(Module):
           ssm_cfg=self.ssm_cfg,
           attn_cfg=self.attn_cfg,
           layer_idx=(layer_idx + i),
-          **factory_kwargs,
+          device=device,
+          dtype=dtype,
         )
         for i in range(int(n_layer))
       ]
@@ -84,7 +85,12 @@ class Isotropic(Module):
 
     self.layers = ModuleList(layers)
 
-    self.rmsnorm = RMSNorm(self.d_model, eps=1e-5, **factory_kwargs)
+    self.rmsnorm = RMSNorm(
+      self.d_model,
+      eps=1e-5,
+      device=device,
+      dtype=dtype,
+    )
 
   def allocate_inference_cache(
     self,
