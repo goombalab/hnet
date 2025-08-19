@@ -9,7 +9,7 @@ from torch.nn.modules.sparse import Embedding
 from typing_extensions import Self
 
 from hnet.modules.dc import RoutingModuleOutput
-from lm.hnet import HNet, HNetState
+from lm.hnet import Hnet, HnetState
 from lm.hnet_config import HnetConfig
 
 
@@ -17,13 +17,13 @@ from lm.hnet_config import HnetConfig
 class CausalLmOutput:
   logits: Tensor
   bpred_output: list[RoutingModuleOutput]
-  inference_params: HNetState
+  inference_params: HnetState
 
 
 @dataclass(eq=False)
 class HnetForCausalLm(Module, GenerationMixin):
   embeddings: Embedding
-  backbone: HNet
+  backbone: Hnet
   lm_head: Linear
 
   def __init__(
@@ -46,7 +46,7 @@ class HnetForCausalLm(Module, GenerationMixin):
       dtype=dtype,
     )
 
-    self.backbone = HNet(
+    self.backbone = Hnet(
       config=config,
       # We pass in the stage_idx as an HNet needs to know what
       # depth of the hierarchy it is in.
@@ -76,15 +76,15 @@ class HnetForCausalLm(Module, GenerationMixin):
   def forward(
     self,
     tokens: Tensor,
-    inference_params: HNetState,
+    inference_params: HnetState,
     mask: Tensor,
   ) -> CausalLmOutput:
     hidden_states = self.embeddings.forward(tokens)
 
     hidden_states, bpred_output = self.backbone.forward(
       hidden_states,
+      mask,
       inference_params=inference_params,
-      mask=mask,
     )
 
     logits = self.lm_head.forward(hidden_states)
@@ -109,7 +109,7 @@ class HnetForCausalLm(Module, GenerationMixin):
   def step(
     self,
     token: Tensor,
-    inference_params: HNetState,
+    inference_params: HnetState,
   ) -> CausalLmOutput:
     hidden_states = self.embeddings.forward(token)
 
