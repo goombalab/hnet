@@ -9,7 +9,7 @@ from flash_attn import (
 from torch import Tensor, bfloat16, empty, float16, int32
 from torch.nn import Linear, Module
 
-from .rotary import RotaryEmbedding
+from lm.rotary_embedding import RotaryEmbedding
 
 
 class FlashCausalSelfAttention(Module):
