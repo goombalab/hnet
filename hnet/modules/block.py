@@ -95,10 +95,15 @@ class Block(Module):
     return hidden_states, residual
 
   def allocate_inference_cache(
-    self, batch_size, max_seqlen, dtype=None, **kwargs
+    self,
+    batch_size,
+    max_seqlen,
+    dtype=None,
   ):
     return self.mixer.allocate_inference_cache(
-      batch_size, max_seqlen, dtype=dtype, **kwargs
+      batch_size,
+      max_seqlen,
+      dtype=dtype,
     )
 
   def step(self, hidden_states, inference_params, residual=None):
@@ -138,7 +143,7 @@ def create_block(
   residual_in_fp32: bool = True,
   device: DeviceLikeType | None = None,
   dtype: dtype | None = None,
-):
+) -> Block:
   if arch in ("t", "T"):
     mixer = CausalMHA(
       d_model,

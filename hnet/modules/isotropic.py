@@ -1,6 +1,6 @@
 import copy
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Optional
 
 import optree
@@ -9,7 +9,6 @@ from torch import Tensor, dtype
 from torch.nn import Module, ModuleList
 
 from hnet.modules.block import create_block
-from hnet.modules.utils import get_stage_cfg
 from lm.hnet_config import HnetConfig
 
 
@@ -179,3 +178,10 @@ class Isotropic(Module):
     inference_params.seqlen_offset += 1
 
     return hidden_states
+
+
+def get_stage_cfg(cfg, stage_idx):
+  return {
+    k: v[stage_idx] if isinstance(v, list) else v
+    for k, v in asdict(cfg).items()
+  }
