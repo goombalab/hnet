@@ -211,16 +211,19 @@ class Hnet(Module):
       **mixer_kwargs,
     )
 
+    assert self.residual_proj is not None
     hidden_states_for_residual = hidden_states.to(
       dtype=self.residual_proj.weight.dtype
     )
-    residual = self.residual_proj(hidden_states_for_residual)
+    residual = self.residual_proj.forward(hidden_states_for_residual)
 
+    assert self.routing_module is not None
     bpred_output = self.routing_module.forward(
       hidden_states,
       mask=mask,
       inference_params=inference_params.routing_module_state,
     )
+    assert self.chunk_layer is not None
     hidden_states, next_cu_seqlens, next_max_seqlen, next_mask = (
       self.chunk_layer.forward(
         hidden_states,
@@ -236,6 +239,7 @@ class Hnet(Module):
       **mixer_kwargs,
     )
 
+    assert self.dechunk_layer is not None
     hidden_states = self.dechunk_layer.forward(
       hidden_states,
       bpred_output.boundary_mask,
@@ -250,6 +254,7 @@ class Hnet(Module):
       bpred_output.selected_probs,
     ).to(hidden_states.dtype)
 
+    assert self.decoder is not None
     hidden_states = self.decoder.forward(
       hidden_states,
       mask=mask,
@@ -279,17 +284,20 @@ class Hnet(Module):
       hidden_states = hidden_states[..., :D]
       return hidden_states, []
 
+    assert self.encoder is not None
     hidden_states = self.encoder.step(
       hidden_states, inference_params.encoder_state
     )
+    assert self.residual_proj is not None
     hidden_states_for_residual = hidden_states.to(
       dtype=self.residual_proj.weight.dtype
     )
-    residual = self.residual_proj(hidden_states_for_residual)
+    residual = self.residual_proj.forward(hidden_states_for_residual)
 
     bpred_output = self.routing_module.step(
       hidden_states, inference_params.routing_module_state
     )
+    assert self.chunk_layer is not None
     hidden_states_inner = self.chunk_layer.step(
       hidden_states, bpred_output.boundary_mask
     )
@@ -301,6 +309,7 @@ class Hnet(Module):
     else:
       prev_boundary_predictions = []
 
+    assert self.dechunk_layer is not None
     hidden_states = self.dechunk_layer.step(
       hidden_states_inner,
       bpred_output.boundary_mask,
@@ -314,8 +323,10 @@ class Hnet(Module):
       bpred_output.selected_probs,
     ).to(hidden_states.dtype)
 
+    assert self.decoder is not None
     hidden_states = self.decoder.step(
-      hidden_states, inference_params.decoder_state
+      hidden_states,
+      inference_params.decoder_state,
     )
     hidden_states = hidden_states[..., :D]
 
