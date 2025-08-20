@@ -15,13 +15,15 @@ class Mamba2Wrapper(Mamba2):
   Mamba2 wrapper class that has the same inference interface as the CausalMHA class.
   """
 
-  def step(self, hidden_states, inference_params):
+  def next_step(self, hidden_states, inference_params):
     # Don't use _get_states_from_cache because we want to assert that they exist
     conv_state, ssm_state = inference_params.key_value_memory_dict[
       self.layer_idx
     ]  # init class of Mamba2 accepts layer_idx
     result, conv_state, ssm_state = super().step(
-      hidden_states, conv_state, ssm_state
+      hidden_states,
+      conv_state,
+      ssm_state,
     )
 
     # Update the state cache in-place
@@ -76,11 +78,17 @@ class Block(Module):
     )
 
     if self.mlp is not None:
-      hidden_states, residual = self.norm2(
-        hidden_states,
-        residual=residual,
-        prenorm=True,
-        residual_in_fp32=self.residual_in_fp32,
+      from typing import Tuple, cast
+
+      assert self.norm2 is not None
+      hidden_states, residual = cast(
+        Tuple[Tensor, Tensor],
+        self.norm2.forward(
+          hidden_states,
+          residual=residual,
+          prenorm=True,
+          residual_in_fp32=self.residual_in_fp32,
+        ),
       )
       hidden_states = self.mlp(hidden_states)
 
@@ -100,13 +108,19 @@ class Block(Module):
       prenorm=True,
       residual_in_fp32=self.residual_in_fp32,
     )
-    hidden_states = self.mixer.step(hidden_states, inference_params)
+    hidden_states = self.mixer.next_step(hidden_states, inference_params)
     if self.mlp is not None:
-      hidden_states, residual = self.norm2(
-        hidden_states,
-        residual=residual,
-        prenorm=True,
-        residual_in_fp32=self.residual_in_fp32,
+      from typing import Tuple, cast
+
+      assert self.norm2 is not None
+      hidden_states, residual = cast(
+        Tuple[Tensor, Tensor],
+        self.norm2.forward(
+          hidden_states,
+          residual=residual,
+          prenorm=True,
+          residual_in_fp32=self.residual_in_fp32,
+        ),
       )
       hidden_states = self.mlp(hidden_states)
 

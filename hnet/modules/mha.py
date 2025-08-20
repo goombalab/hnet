@@ -403,5 +403,5 @@ class CausalMHA(Module):
     out = self.out_proj(rearrange(context, "... h d -> ... (h d)"))
     return out
 
-  def step(self, x, inference_params):
+  def next_step(self, x, inference_params):
     return self.forward(x, inference_params=inference_params)
