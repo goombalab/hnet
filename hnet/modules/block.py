@@ -6,8 +6,9 @@ from torch import Tensor, dtype
 from torch._prims_common import DeviceLikeType
 from torch.nn import Module
 
+from lm.swiglu import Swiglu
+
 from .mha import CausalMHA
-from .mlp import SwiGLU
 
 
 class Mamba2Wrapper(Mamba2):
@@ -34,7 +35,7 @@ class Mamba2Wrapper(Mamba2):
 
 class Block(Module):
   mixer: CausalMHA | Mamba2Wrapper
-  mlp: SwiGLU | None
+  mlp: Swiglu | None
   norm1: RMSNorm
   norm2: RMSNorm | None
   residual_in_fp32: bool
@@ -42,7 +43,7 @@ class Block(Module):
   def __init__(
     self,
     mixer: CausalMHA | Mamba2Wrapper,
-    mlp: SwiGLU | None,
+    mlp: Swiglu | None,
     norm1: RMSNorm,
     norm2: RMSNorm | None = None,
     residual_in_fp32: bool = True,
@@ -164,7 +165,7 @@ def create_block(
     raise NotImplementedError
 
   if arch in ("T", "M"):
-    mlp = SwiGLU(
+    mlp = Swiglu(
       d_model,
       d_intermediate,
       device=device,
@@ -178,7 +179,7 @@ def create_block(
   norm1 = RMSNorm(d_model, eps=norm_epsilon, device=device, dtype=dtype)
   norm2 = (
     RMSNorm(d_model, eps=norm_epsilon, device=device, dtype=dtype)
-    if isinstance(mlp, SwiGLU)
+    if isinstance(mlp, Swiglu)
     else None
   )
 

@@ -152,7 +152,7 @@ class RotaryEmbedding(Module):
       assert self.scale is None
 
       self._update_cos_sin_cache(max_seqlen, device=qkv.device, dtype=qkv.dtype)
-      return apply_pad_packed_rotary_emb_qkv_(
+      return _apply_pad_packed_rotary_emb_qkv(
         qkv,
         self._cos_cached,
         self._sin_cached,
@@ -172,7 +172,7 @@ class RotaryEmbedding(Module):
       )
     if kv is None:
       if self.scale is None:
-        return apply_rotary_emb_qkv_(
+        return _apply_rotary_emb_qkv(
           qkv,
           self._cos_cached,
           self._sin_cached,
@@ -181,7 +181,7 @@ class RotaryEmbedding(Module):
           num_heads_q=num_heads_q,
         )
       else:
-        return apply_rotary_emb_qkv_(
+        return _apply_rotary_emb_qkv(
           qkv,
           self._cos_cached,
           self._sin_cached,
@@ -193,7 +193,7 @@ class RotaryEmbedding(Module):
         )
     else:
       q = qkv
-      q = apply_rotary_emb(
+      q = _apply_rotary_emb(
         q,
         self._cos_cached,
         self._sin_cached,
@@ -202,7 +202,7 @@ class RotaryEmbedding(Module):
         seqlen_offsets=seqlen_offset,
       )
       if self.scale is None:
-        kv = apply_rotary_emb_kv_(
+        kv = _apply_rotary_emb_kv_(
           kv,
           self._cos_cached,
           self._sin_cached,
@@ -210,7 +210,7 @@ class RotaryEmbedding(Module):
           seqlen_offsets=seqlen_offset,
         )
       else:
-        kv = apply_rotary_emb_kv_(
+        kv = _apply_rotary_emb_kv_(
           kv,
           self._cos_k_cached,
           self._sin_k_cached,
@@ -220,7 +220,7 @@ class RotaryEmbedding(Module):
       return q, kv
 
 
-class ApplyPadPackedRotaryEmbQKV_(autograd.Function):
+class _ApplyPadPackedRotaryEmbQKV(autograd.Function):
   @staticmethod
   def forward(
     ctx,
@@ -285,7 +285,119 @@ class ApplyPadPackedRotaryEmbQKV_(autograd.Function):
     return dqkv, None, None, None, None, None, None, None
 
 
-class ApplyRotaryEmbQKV_(autograd.Function):
+class _ApplyRotaryEmb(autograd.Function):
+  @staticmethod
+  def forward(
+    ctx,
+    x,
+    cos,
+    sin,
+    interleaved=False,
+    inplace=False,
+    seqlen_offsets: int | Tensor = 0,
+    cu_seqlens: Tensor | None = None,
+    max_seqlen: int | None = None,
+  ):
+    out = apply_rotary(
+      x,
+      cos,
+      sin,
+      seqlen_offsets=seqlen_offsets,
+      cu_seqlens=cu_seqlens,
+      max_seqlen=max_seqlen,
+      interleaved=interleaved,
+      inplace=inplace,
+    )
+    if isinstance(seqlen_offsets, int):
+      ctx.save_for_backward(
+        cos, sin, cu_seqlens
+      )  # Can't save int with save_for_backward
+      ctx.seqlen_offsets = seqlen_offsets
+    else:
+      ctx.save_for_backward(cos, sin, cu_seqlens, seqlen_offsets)
+      ctx.seqlen_offsets = None
+    ctx.interleaved = interleaved
+    ctx.inplace = inplace
+    ctx.max_seqlen = max_seqlen
+    return out if not inplace else x
+
+  @staticmethod
+  def backward(ctx, *grad_outputs):
+    (do,) = grad_outputs
+    seqlen_offsets = ctx.seqlen_offsets
+    if seqlen_offsets is None:
+      cos, sin, cu_seqlens, seqlen_offsets = ctx.saved_tensors
+    else:
+      cos, sin, cu_seqlens = ctx.saved_tensors
+    # TD [2023-09-02]: For some reason Triton (2.0.0.post1) errors with
+    # "[CUDA]: invalid device context", and cloning makes it work. Idk why. Triton 2.1.0 works.
+    if not ctx.interleaved and not ctx.inplace:
+      do = do.clone()
+    dx = apply_rotary(
+      do,
+      cos,
+      sin,
+      seqlen_offsets=seqlen_offsets,
+      cu_seqlens=cu_seqlens,
+      max_seqlen=ctx.max_seqlen,
+      interleaved=ctx.interleaved,
+      inplace=ctx.inplace,
+      conjugate=True,
+    )
+    return dx, None, None, None, None, None, None, None
+
+
+class _ApplyRotaryEmbKV(autograd.Function):
+  @staticmethod
+  def forward(
+    ctx,
+    kv,
+    cos,
+    sin,
+    interleaved=False,
+    seqlen_offsets: int | Tensor = 0,
+  ):
+    batch, seqlen, two, nheads, headdim = kv.shape
+    assert two == 2
+    k = kv[:, :, 0]
+    apply_rotary(
+      k,
+      cos,
+      sin,
+      seqlen_offsets=seqlen_offsets,
+      interleaved=interleaved,
+      inplace=True,
+    )
+    if isinstance(seqlen_offsets, int):
+      ctx.save_for_backward(cos, sin)  # Can't save int with save_for_backward
+      ctx.seqlen_offsets = seqlen_offsets
+    else:
+      ctx.save_for_backward(cos, sin, seqlen_offsets)
+      ctx.seqlen_offsets = None
+    ctx.interleaved = interleaved
+    return kv
+
+  @staticmethod
+  def backward(ctx, *grad_outputs):
+    (dkv,) = grad_outputs
+    seqlen_offsets = ctx.seqlen_offsets
+    if seqlen_offsets is None:
+      cos, sin, seqlen_offsets = ctx.saved_tensors
+    else:
+      cos, sin = ctx.saved_tensors
+    apply_rotary(
+      dkv[:, :, 0],
+      cos,
+      sin,
+      seqlen_offsets=seqlen_offsets,
+      interleaved=ctx.interleaved,
+      inplace=True,
+      conjugate=True,
+    )
+    return dkv, None, None, None, None
+
+
+class _ApplyRotaryEmbQKV(autograd.Function):
   @staticmethod
   def forward(
     ctx,
@@ -414,142 +526,44 @@ class ApplyRotaryEmbQKV_(autograd.Function):
     return dqkv, None, None, None, None, None, None, None
 
 
-class ApplyRotaryEmbKV_(autograd.Function):
-  @staticmethod
-  def forward(
-    ctx,
-    kv,
-    cos,
-    sin,
-    interleaved=False,
-    seqlen_offsets: int | Tensor = 0,
-  ):
-    batch, seqlen, two, nheads, headdim = kv.shape
-    assert two == 2
-    k = kv[:, :, 0]
-    apply_rotary(
-      k,
-      cos,
-      sin,
-      seqlen_offsets=seqlen_offsets,
-      interleaved=interleaved,
-      inplace=True,
-    )
-    if isinstance(seqlen_offsets, int):
-      ctx.save_for_backward(cos, sin)  # Can't save int with save_for_backward
-      ctx.seqlen_offsets = seqlen_offsets
-    else:
-      ctx.save_for_backward(cos, sin, seqlen_offsets)
-      ctx.seqlen_offsets = None
-    ctx.interleaved = interleaved
-    return kv
-
-  @staticmethod
-  def backward(ctx, *grad_outputs):
-    (dkv,) = grad_outputs
-    seqlen_offsets = ctx.seqlen_offsets
-    if seqlen_offsets is None:
-      cos, sin, seqlen_offsets = ctx.saved_tensors
-    else:
-      cos, sin = ctx.saved_tensors
-    apply_rotary(
-      dkv[:, :, 0],
-      cos,
-      sin,
-      seqlen_offsets=seqlen_offsets,
-      interleaved=ctx.interleaved,
-      inplace=True,
-      conjugate=True,
-    )
-    return dkv, None, None, None, None
-
-
-class ApplyRotaryEmb(autograd.Function):
-  @staticmethod
-  def forward(
-    ctx,
-    x,
-    cos,
-    sin,
-    interleaved=False,
-    inplace=False,
-    seqlen_offsets: int | Tensor = 0,
-    cu_seqlens: Tensor | None = None,
-    max_seqlen: int | None = None,
-  ):
-    out = apply_rotary(
-      x,
-      cos,
-      sin,
-      seqlen_offsets=seqlen_offsets,
-      cu_seqlens=cu_seqlens,
-      max_seqlen=max_seqlen,
-      interleaved=interleaved,
-      inplace=inplace,
-    )
-    if isinstance(seqlen_offsets, int):
-      ctx.save_for_backward(
-        cos, sin, cu_seqlens
-      )  # Can't save int with save_for_backward
-      ctx.seqlen_offsets = seqlen_offsets
-    else:
-      ctx.save_for_backward(cos, sin, cu_seqlens, seqlen_offsets)
-      ctx.seqlen_offsets = None
-    ctx.interleaved = interleaved
-    ctx.inplace = inplace
-    ctx.max_seqlen = max_seqlen
-    return out if not inplace else x
-
-  @staticmethod
-  def backward(ctx, *grad_outputs):
-    (do,) = grad_outputs
-    seqlen_offsets = ctx.seqlen_offsets
-    if seqlen_offsets is None:
-      cos, sin, cu_seqlens, seqlen_offsets = ctx.saved_tensors
-    else:
-      cos, sin, cu_seqlens = ctx.saved_tensors
-    # TD [2023-09-02]: For some reason Triton (2.0.0.post1) errors with
-    # "[CUDA]: invalid device context", and cloning makes it work. Idk why. Triton 2.1.0 works.
-    if not ctx.interleaved and not ctx.inplace:
-      do = do.clone()
-    dx = apply_rotary(
-      do,
-      cos,
-      sin,
-      seqlen_offsets=seqlen_offsets,
-      cu_seqlens=cu_seqlens,
-      max_seqlen=ctx.max_seqlen,
-      interleaved=ctx.interleaved,
-      inplace=ctx.inplace,
-      conjugate=True,
-    )
-    return dx, None, None, None, None, None, None, None
-
-
-def apply_rotary_emb_kv_(
-  kv,
+def _apply_pad_packed_rotary_emb_qkv(
+  qkv,
   cos,
   sin,
+  cu_seqlens,
+  max_seqlen,
   interleaved=False,
   seqlen_offsets: int | Tensor = 0,
+  num_heads_q: int | None = None,
 ):
   """
   Arguments:
-      kv: (batch_size, seqlen, 2, nheads, headdim)
+      qkv: (batch_size, seqlen, 3, nheads, headdim) or (batch_size, seqlen, num_heads_q + 2 * num_heads_k, headdim).
+          If qkv has shape (batch_size, seqlen, num_heads_q + 2 * num_heads_k, headdim) (e.g. MQA / GQA),
+          then num_heads_q must be provided.
       cos, sin: (seqlen, rotary_dim / 2)
       interleaved: if True, rotate pairs of even and odd dimensions (GPT-J style) instead of
           1st half and 2nd half (GPT-NeoX style).
       seqlen_offsets: (batch_size,) or int. Each sequence in Q and K is shifted by this amount.
           Most commonly used in inference when we have KV cache.
   Return:
-      kv: (batch_size, seqlen, 2, nheads, headdim)
+      qkv: (batch_size, seqlen, 3, nheads, headdim) or (batch_size, seqlen, num_heads_q + 2 * num_heads_k, headdim)
   rotary_dim must be <= headdim
-  Apply rotary embedding *inplace* to the first rotary_dim of K.
+  Apply rotary embedding *inplace* to the first rotary_dim of Q and K.
   """
-  return ApplyRotaryEmbKV_.apply(kv, cos, sin, interleaved, seqlen_offsets)
+  return _ApplyPadPackedRotaryEmbQKV.apply(
+    qkv,
+    cos,
+    sin,
+    cu_seqlens,
+    max_seqlen,
+    interleaved,
+    seqlen_offsets,
+    num_heads_q,
+  )
 
 
-def apply_rotary_emb(
+def _apply_rotary_emb(
   x,
   cos,
   sin,
@@ -577,12 +591,35 @@ def apply_rotary_emb(
   rotary_dim must be <= headdim
   Apply rotary embedding to the first rotary_dim of x.
   """
-  return ApplyRotaryEmb.apply(
+  return _ApplyRotaryEmb.apply(
     x, cos, sin, interleaved, inplace, seqlen_offsets, cu_seqlens, max_seqlen
   )
 
 
-def apply_rotary_emb_qkv_(
+def _apply_rotary_emb_kv_(
+  kv,
+  cos,
+  sin,
+  interleaved=False,
+  seqlen_offsets: int | Tensor = 0,
+):
+  """
+  Arguments:
+      kv: (batch_size, seqlen, 2, nheads, headdim)
+      cos, sin: (seqlen, rotary_dim / 2)
+      interleaved: if True, rotate pairs of even and odd dimensions (GPT-J style) instead of
+          1st half and 2nd half (GPT-NeoX style).
+      seqlen_offsets: (batch_size,) or int. Each sequence in Q and K is shifted by this amount.
+          Most commonly used in inference when we have KV cache.
+  Return:
+      kv: (batch_size, seqlen, 2, nheads, headdim)
+  rotary_dim must be <= headdim
+  Apply rotary embedding *inplace* to the first rotary_dim of K.
+  """
+  return _ApplyRotaryEmbKV.apply(kv, cos, sin, interleaved, seqlen_offsets)
+
+
+def _apply_rotary_emb_qkv(
   qkv,
   cos,
   sin,
@@ -608,43 +645,6 @@ def apply_rotary_emb_qkv_(
   rotary_dim must be <= headdim
   Apply rotary embedding *inplace* to the first rotary_dim of Q and K.
   """
-  return ApplyRotaryEmbQKV_.apply(
+  return _ApplyRotaryEmbQKV.apply(
     qkv, cos, sin, cos_k, sin_k, interleaved, seqlen_offsets, num_heads_q
-  )
-
-
-def apply_pad_packed_rotary_emb_qkv_(
-  qkv,
-  cos,
-  sin,
-  cu_seqlens,
-  max_seqlen,
-  interleaved=False,
-  seqlen_offsets: int | Tensor = 0,
-  num_heads_q: int | None = None,
-):
-  """
-  Arguments:
-      qkv: (batch_size, seqlen, 3, nheads, headdim) or (batch_size, seqlen, num_heads_q + 2 * num_heads_k, headdim).
-          If qkv has shape (batch_size, seqlen, num_heads_q + 2 * num_heads_k, headdim) (e.g. MQA / GQA),
-          then num_heads_q must be provided.
-      cos, sin: (seqlen, rotary_dim / 2)
-      interleaved: if True, rotate pairs of even and odd dimensions (GPT-J style) instead of
-          1st half and 2nd half (GPT-NeoX style).
-      seqlen_offsets: (batch_size,) or int. Each sequence in Q and K is shifted by this amount.
-          Most commonly used in inference when we have KV cache.
-  Return:
-      qkv: (batch_size, seqlen, 3, nheads, headdim) or (batch_size, seqlen, num_heads_q + 2 * num_heads_k, headdim)
-  rotary_dim must be <= headdim
-  Apply rotary embedding *inplace* to the first rotary_dim of Q and K.
-  """
-  return ApplyPadPackedRotaryEmbQKV_.apply(
-    qkv,
-    cos,
-    sin,
-    cu_seqlens,
-    max_seqlen,
-    interleaved,
-    seqlen_offsets,
-    num_heads_q,
   )

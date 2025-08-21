@@ -1,10 +1,10 @@
 from flash_attn.ops.activations import swiglu
-from torch import dtype
+from torch import Tensor, dtype
 from torch._prims_common import DeviceLikeType
 from torch.nn import Linear, Module
 
 
-class SwiGLU(Module):
+class Swiglu(Module):
   fc1: Linear
   fc2: Linear
 
@@ -42,7 +42,7 @@ class SwiGLU(Module):
       dtype=dtype,
     )
 
-  def forward(self, x):
+  def forward(self, x: Tensor):
     y = self.fc1(x)
     y, gate = y.chunk(2, dim=-1)
     y = swiglu(gate, y)
