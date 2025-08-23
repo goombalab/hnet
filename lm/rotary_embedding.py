@@ -25,6 +25,17 @@ class RotaryEmbedding(Module):
   Reference: https://github.com/sunyt32/torchscale/blob/main/torchscale/component/xpos_relative_position.py
   """
 
+  dim: int
+  base: float
+  pos_idx_in_fp32: bool
+  inv_freq: Tensor
+  interleaved: bool
+  _seq_len_cached: int
+  _cos_cached: Tensor | None
+  _sin_cached: Tensor | None
+  scale_base: float | None
+  scale: Tensor | None
+
   def __init__(
     self,
     dim: int,
@@ -72,7 +83,7 @@ class RotaryEmbedding(Module):
     self._cos_k_cached = None
     self._sin_k_cached = None
 
-  def _compute_inv_freq(self, device=None):
+  def _compute_inv_freq(self, device=None) -> Tensor:
     return 1.0 / (
       self.base
       ** (arange(0, self.dim, 2, device=device, dtype=float32) / self.dim)
@@ -224,12 +235,12 @@ class _ApplyPadPackedRotaryEmbQKV(autograd.Function):
   @staticmethod
   def forward(
     ctx,
-    qkv,
-    cos,
-    sin,
-    cu_seqlens,
-    max_seqlen,
-    interleaved=False,
+    qkv: Tensor,
+    cos: Tensor,
+    sin: Tensor,
+    cu_seqlens: Tensor,
+    max_seqlen: int,
+    interleaved: bool = False,
     seqlen_offsets: int | Tensor = 0,
     num_heads_q: int | None = None,
   ):
@@ -527,15 +538,15 @@ class _ApplyRotaryEmbQKV(autograd.Function):
 
 
 def _apply_pad_packed_rotary_emb_qkv(
-  qkv,
-  cos,
-  sin,
-  cu_seqlens,
-  max_seqlen,
-  interleaved=False,
+  qkv: Tensor,
+  cos: Tensor | None,
+  sin: Tensor | None,
+  cu_seqlens: Tensor,
+  max_seqlen: int,
+  interleaved: bool = False,
   seqlen_offsets: int | Tensor = 0,
   num_heads_q: int | None = None,
-):
+) -> Tensor:
   """
   Arguments:
       qkv: (batch_size, seqlen, 3, nheads, headdim) or (batch_size, seqlen, num_heads_q + 2 * num_heads_k, headdim).
@@ -551,28 +562,33 @@ def _apply_pad_packed_rotary_emb_qkv(
   rotary_dim must be <= headdim
   Apply rotary embedding *inplace* to the first rotary_dim of Q and K.
   """
-  return _ApplyPadPackedRotaryEmbQKV.apply(
-    qkv,
-    cos,
-    sin,
-    cu_seqlens,
-    max_seqlen,
-    interleaved,
-    seqlen_offsets,
-    num_heads_q,
+  from typing import cast
+
+  return cast(
+    Tensor,
+    _ApplyPadPackedRotaryEmbQKV.apply(
+      qkv,
+      cos,
+      sin,
+      cu_seqlens,
+      max_seqlen,
+      interleaved,
+      seqlen_offsets,
+      num_heads_q,
+    ),
   )
 
 
 def _apply_rotary_emb(
-  x,
-  cos,
-  sin,
-  interleaved=False,
-  inplace=False,
+  x: Tensor,
+  cos: Tensor | None,
+  sin: Tensor | None,
+  interleaved: bool = False,
+  inplace: bool = False,
   seqlen_offsets: int | Tensor = 0,
   cu_seqlens: Tensor | None = None,
   max_seqlen: int | None = None,
-):
+) -> Tensor:
   """
   Arguments:
       x: (batch_size, seqlen, nheads, headdim) if cu_seqlens is None
@@ -591,18 +607,23 @@ def _apply_rotary_emb(
   rotary_dim must be <= headdim
   Apply rotary embedding to the first rotary_dim of x.
   """
-  return _ApplyRotaryEmb.apply(
-    x, cos, sin, interleaved, inplace, seqlen_offsets, cu_seqlens, max_seqlen
+  from typing import cast
+
+  return cast(
+    Tensor,
+    _ApplyRotaryEmb.apply(
+      x, cos, sin, interleaved, inplace, seqlen_offsets, cu_seqlens, max_seqlen
+    ),
   )
 
 
 def _apply_rotary_emb_kv_(
-  kv,
-  cos,
-  sin,
-  interleaved=False,
+  kv: Tensor,
+  cos: Tensor | None,
+  sin: Tensor | None,
+  interleaved: bool = False,
   seqlen_offsets: int | Tensor = 0,
-):
+) -> Tensor:
   """
   Arguments:
       kv: (batch_size, seqlen, 2, nheads, headdim)
@@ -616,19 +637,24 @@ def _apply_rotary_emb_kv_(
   rotary_dim must be <= headdim
   Apply rotary embedding *inplace* to the first rotary_dim of K.
   """
-  return _ApplyRotaryEmbKV.apply(kv, cos, sin, interleaved, seqlen_offsets)
+  from typing import cast
+
+  return cast(
+    Tensor,
+    _ApplyRotaryEmbKV.apply(kv, cos, sin, interleaved, seqlen_offsets),
+  )
 
 
 def _apply_rotary_emb_qkv(
-  qkv,
-  cos,
-  sin,
-  cos_k=None,
-  sin_k=None,
-  interleaved=False,
+  qkv: Tensor,
+  cos: Tensor | None,
+  sin: Tensor | None,
+  cos_k: Tensor | None = None,
+  sin_k: Tensor | None = None,
+  interleaved: bool = False,
   seqlen_offsets: int | Tensor = 0,
   num_heads_q: int | None = None,
-):
+) -> Tensor:
   """
   Arguments:
       qkv: (batch_size, seqlen, 3, nheads, headdim) or (batch_size, seqlen, num_heads_q + 2 * num_heads_k, headdim).
@@ -645,6 +671,11 @@ def _apply_rotary_emb_qkv(
   rotary_dim must be <= headdim
   Apply rotary embedding *inplace* to the first rotary_dim of Q and K.
   """
-  return _ApplyRotaryEmbQKV.apply(
-    qkv, cos, sin, cos_k, sin_k, interleaved, seqlen_offsets, num_heads_q
+  from typing import cast
+
+  return cast(
+    Tensor,
+    _ApplyRotaryEmbQKV.apply(
+      qkv, cos, sin, cos_k, sin_k, interleaved, seqlen_offsets, num_heads_q
+    ),
   )
