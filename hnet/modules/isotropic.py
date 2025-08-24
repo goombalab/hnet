@@ -8,7 +8,7 @@ from flash_attn.ops.triton.layer_norm import RMSNorm
 from torch import Tensor, dtype
 from torch.nn import Module, ModuleList
 
-from hnet.modules.block import create_block
+from lm.block import create_block
 from lm.hnet_config import HnetConfig
 
 
