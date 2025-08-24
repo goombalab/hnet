@@ -6,13 +6,13 @@ from torch.nn import Linear, Module, Parameter, init
 from typing_extensions import Self
 
 from hnet.modules.dc import (
-  DeChunkLayer,
   DeChunkState,
   RoutingModule,
   RoutingModuleState,
 )
 from hnet.modules.isotropic import Isotropic, IsotropicInferenceParams
 from lm.chunk_layer import ChunkLayer
+from lm.dechunk_layer import DeChunkLayer
 from lm.hnet_config import HnetConfig
 
 
