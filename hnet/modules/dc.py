@@ -1,24 +1,9 @@
-from dataclasses import dataclass
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from lm.routing_module_output import RoutingModuleOutput
-
-
-@dataclass
-class RoutingModuleState:
-  """
-  The state of the routing module.
-
-  Contains
-      - [has_seen_tokens] (batch_size,) bool tensor. Whether that batch element has processed any tokens yet.
-      - [last_hidden_state] (batch_size, d_model) tensor. The last hidden state of the batch element (used for boundary prediction).
-  """
-
-  has_seen_tokens: torch.Tensor  # (batch_size,)
-  last_hidden_state: torch.Tensor  # (batch_size, d_model)
+from lm.routing_module_state import RoutingModuleState
 
 
 class RoutingModule(nn.Module):
