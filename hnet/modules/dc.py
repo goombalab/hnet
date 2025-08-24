@@ -153,39 +153,6 @@ class RoutingModule(nn.Module):
     )
 
 
-class ChunkLayer(nn.Module):
-  def forward(self, hidden_states, boundary_mask, mask=None):
-    next_cu_seqlens = None
-    num_tokens = boundary_mask.sum(dim=-1)
-    next_max_seqlen = int(num_tokens.max())
-
-    device = hidden_states.device
-    L = hidden_states.shape[1]
-    token_idx = (
-      torch.arange(L, device=device)[None, :] + (~boundary_mask).long() * L
-    )
-    seq_sorted_indices = torch.argsort(token_idx, dim=1)
-
-    next_hidden_states = torch.gather(
-      hidden_states,
-      dim=1,
-      index=seq_sorted_indices[:, :next_max_seqlen, None].expand(
-        -1, -1, hidden_states.shape[-1]
-      ),
-    )
-
-    next_mask = (
-      torch.arange(next_max_seqlen, device=device)[None, :]
-      < num_tokens[:, None]
-    )
-    next_max_seqlen = None
-
-    return next_hidden_states, next_cu_seqlens, next_max_seqlen, next_mask
-
-  def step(self, hidden_states, boundary_mask):
-    return hidden_states[boundary_mask]
-
-
 class DeChunkLayer(nn.Module):
   def __init__(
     self,

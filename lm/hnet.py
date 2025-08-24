@@ -6,13 +6,13 @@ from torch.nn import Linear, Module, Parameter, init
 from typing_extensions import Self
 
 from hnet.modules.dc import (
-  ChunkLayer,
   DeChunkLayer,
   DeChunkState,
   RoutingModule,
   RoutingModuleState,
 )
 from hnet.modules.isotropic import Isotropic, IsotropicInferenceParams
+from lm.chunk_layer import ChunkLayer
 from lm.hnet_config import HnetConfig
 
 
@@ -220,12 +220,9 @@ class Hnet(Module):
       inference_params=inference_params.routing_module_state,
     )
     assert self.chunk_layer is not None
-    hidden_states, next_cu_seqlens, next_max_seqlen, next_mask = (
-      self.chunk_layer.forward(
-        hidden_states,
-        bpred_output.boundary_mask,
-        mask=mask,
-      )
+    hidden_states, next_mask = self.chunk_layer.forward(
+      hidden_states,
+      bpred_output.boundary_mask,
     )
 
     hidden_states, prev_boundary_predictions = self.main_network.forward(
@@ -296,7 +293,8 @@ class Hnet(Module):
     )
     assert self.chunk_layer is not None
     hidden_states_inner = self.chunk_layer.step(
-      hidden_states, bpred_output.boundary_mask
+      hidden_states,
+      bpred_output.boundary_mask,
     )
 
     if hidden_states_inner.shape[0] > 0:
