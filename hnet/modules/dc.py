@@ -4,12 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-@dataclass
-class RoutingModuleOutput:
-  boundary_prob: torch.Tensor
-  boundary_mask: torch.Tensor
-  selected_probs: torch.Tensor
+from lm.routing_module_output import RoutingModuleOutput
 
 
 @dataclass

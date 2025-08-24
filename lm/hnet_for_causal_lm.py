@@ -7,9 +7,9 @@ from torch.nn import Linear, Module
 from torch.nn.modules.sparse import Embedding
 from typing_extensions import Self
 
-from hnet.modules.dc import RoutingModuleOutput
 from lm.hnet import Hnet, HnetState
 from lm.hnet_config import HnetConfig
+from lm.routing_module_output import RoutingModuleOutput
 
 
 @dataclass
