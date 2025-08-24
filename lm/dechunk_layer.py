@@ -18,7 +18,7 @@ from torch import (
 )
 from torch.nn import Module
 
-from hnet.modules.dc import DeChunkState
+from lm.dechunk_state import DeChunkState
 
 
 class DeChunkLayer(Module):

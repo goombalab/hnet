@@ -26,18 +26,6 @@ class RoutingModuleState:
   last_hidden_state: torch.Tensor  # (batch_size, d_model)
 
 
-@dataclass
-class DeChunkState:
-  """
-  The state of the dechunk.
-
-  Contains
-      - [last_value] (batch_size, d_model) tensor. The last value of the batch element (used for the EMA).
-  """
-
-  last_value: torch.Tensor  # (batch_size, d_model)
-
-
 class RoutingModule(nn.Module):
   def __init__(self, d_model, device=None, dtype=None):
     self.d_model = d_model
