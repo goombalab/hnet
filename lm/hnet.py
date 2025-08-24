@@ -42,7 +42,6 @@ class HnetState:
 
 
 class Hnet(Module):
-  is_innermost: bool
   main_network: "Hnet | Isotropic"
   encoder: Isotropic | None
   decoder: Isotropic | None
@@ -68,9 +67,9 @@ class Hnet(Module):
       f"Wrong arch_layout: {arch_layout}"
     )
 
-    self.is_innermost = len(arch_layout) == 1
+    is_innermost = len(arch_layout) == 1
 
-    if self.is_innermost:
+    if is_innermost:
       self.main_network = Isotropic(
         config,
         stage_idx=stage_idx,
@@ -96,7 +95,7 @@ class Hnet(Module):
       )
 
     d_model_n = config.d_model[stage_idx]
-    if not self.is_innermost:
+    if not is_innermost:
       self.routing_module = RoutingModule(d_model_n, device, dtype)
       self.chunk_layer = ChunkLayer()
       self.dechunk_layer = DeChunkLayer(d_model_n)
@@ -106,7 +105,7 @@ class Hnet(Module):
         d_model_n, d_model_n, device=device, dtype=float32
       )
       init.zeros_(self.residual_proj.weight)
-      self.residual_proj.weight._no_reinit = True
+      self.residual_proj.weight._no_reinit = True  # type: ignore
       self.residual_func = lambda out, residual, p: out * ste_func(p) + residual
 
     if stage_idx > 0 and d_model_n - config.d_model[stage_idx - 1] > 0:
@@ -142,49 +141,46 @@ class Hnet(Module):
         - [decoder state]
     It is thus a list of length 5.
     """
-    if self.is_innermost:
+    if isinstance(self.main_network, Isotropic):
       return HnetState(
         main_network_state=self.main_network.allocate_inference_cache(
           batch_size, max_seqlen, dtype=dtype
         )
       )
-    else:
-      assert (
-        self.residual_proj is not None
-        and self.encoder is not None
-        and self.routing_module is not None
-        and self.dechunk_layer is not None
-        and self.decoder is not None
-      )
-      device = self.residual_proj.weight.device
-      return HnetState(
-        main_network_state=self.main_network.allocate_inference_cache(
-          batch_size, max_seqlen, dtype=dtype
-        ),
-        encoder_state=self.encoder.allocate_inference_cache(
-          batch_size, max_seqlen, dtype=dtype
-        ),
-        routing_module_state=self.routing_module.allocate_inference_cache(
-          batch_size, max_seqlen, device, dtype=dtype
-        ),
-        dechunk_state=self.dechunk_layer.allocate_inference_cache(
-          batch_size, max_seqlen, device, dtype=dtype
-        ),
-        decoder_state=self.decoder.allocate_inference_cache(
-          batch_size, max_seqlen, dtype=dtype
-        ),
-      )
+
+    assert (
+      self.residual_proj is not None
+      and self.encoder is not None
+      and self.routing_module is not None
+      and self.dechunk_layer is not None
+      and self.decoder is not None
+    )
+    device = self.residual_proj.weight.device
+    return HnetState(
+      main_network_state=self.main_network.allocate_inference_cache(
+        batch_size, max_seqlen, dtype=dtype
+      ),
+      encoder_state=self.encoder.allocate_inference_cache(
+        batch_size, max_seqlen, dtype=dtype
+      ),
+      routing_module_state=self.routing_module.allocate_inference_cache(
+        batch_size, max_seqlen, device, dtype=dtype
+      ),
+      dechunk_state=self.dechunk_layer.allocate_inference_cache(
+        batch_size, max_seqlen, device, dtype=dtype
+      ),
+      decoder_state=self.decoder.allocate_inference_cache(
+        batch_size, max_seqlen, dtype=dtype
+      ),
+    )
 
   def forward(
     self,
     hidden_states,
     mask,
-    inference_params=None,
+    inference_params,
     **mixer_kwargs,
   ):
-    if inference_params is None:
-      inference_params = HnetState(main_network_state=None)
-
     D = hidden_states.shape[-1]
     EARLY_DIMS = hidden_states.shape[:-1]
 
@@ -193,7 +189,7 @@ class Hnet(Module):
         (hidden_states, self.pad_dimension.expand(EARLY_DIMS + (-1,))), dim=-1
       )
 
-    if self.is_innermost:
+    if isinstance(self.main_network, Isotropic):
       hidden_states = self.main_network.forward(
         hidden_states,
         mask=mask,
@@ -277,7 +273,7 @@ class Hnet(Module):
         dim=-1,
       )
 
-    if self.is_innermost:
+    if isinstance(self.main_network, Isotropic):
       hidden_states = self.main_network.step(
         hidden_states, inference_params.main_network_state
       )
@@ -294,6 +290,7 @@ class Hnet(Module):
     )
     residual = self.residual_proj.forward(hidden_states_for_residual)
 
+    assert self.routing_module is not None
     bpred_output = self.routing_module.step(
       hidden_states, inference_params.routing_module_state
     )
