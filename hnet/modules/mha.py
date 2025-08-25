@@ -243,7 +243,9 @@ class CausalMHA(Module):
       d_model, d_model, bias=out_proj_bias, **factory_kwargs
     )
 
-  def allocate_inference_cache(self, batch_size, max_seqlen, dtype=None):
+  def allocate_inference_cache(
+    self, batch_size, max_seqlen, dtype=None
+  ) -> Tensor:
     dtype = self.out_proj.weight.dtype if dtype is None else dtype
     device = self.out_proj.weight.device
     return empty(

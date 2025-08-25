@@ -1,14 +1,16 @@
 import copy
 import re
 from dataclasses import asdict, dataclass, field
-from typing import Optional
+from typing import cast
 
-import optree
 from flash_attn.ops.triton.layer_norm import RMSNorm
+from optree import tree_map
+from optree.typing import PyTree
 from torch import Tensor, dtype
+from torch._prims_common import DeviceLikeType
 from torch.nn import Module, ModuleList
 
-from lm.block import create_block
+from lm.block import Block, create_block
 from lm.hnet_config import HnetConfig
 
 
@@ -21,43 +23,50 @@ class IsotropicInferenceParams:
   max_batch_size: int
   seqlen_offset: int = 0
   batch_size_offset: int = 0
-  key_value_memory_dict: dict = field(default_factory=dict)
-  lengths_per_sample: Optional[Tensor] = None
+  key_value_memory_dict: dict[int, Tensor] = field(default_factory=dict)
+  lengths_per_sample: Tensor | None = None
 
-  def reset(self, max_seqlen, max_batch_size):
+  def reset(self, max_seqlen: int, max_batch_size: int):
     self.max_seqlen = max_seqlen
     self.max_batch_size = max_batch_size
     self.seqlen_offset = 0
     if self.lengths_per_sample is not None:
       self.lengths_per_sample.zero_()
 
-    optree.tree_map(
+    tree_map(
       lambda x: x.zero_() if isinstance(x, Tensor) else x,
-      self.key_value_memory_dict,
+      cast(PyTree, self.key_value_memory_dict),
     )
 
 
 class Isotropic(Module):
+  stage_idx: int
+  d_model: int
+  ssm_cfg: dict
+  attn_cfg: dict
+  arch_full: list
+  layers: ModuleList
+  rmsnorm: RMSNorm
+
   def __init__(
     self,
     config: HnetConfig,
     pos_idx: int,
     stage_idx: int,
-    device=None,
+    device: DeviceLikeType | None = None,
     dtype=None,
   ):
-    factory_kwargs = {"device": device, "dtype": dtype}
     super().__init__()
 
     self.stage_idx = stage_idx
     self.d_model = config.d_model[self.stage_idx]
-    self.ssm_cfg = get_stage_cfg(config.ssm_cfg, stage_idx)
-    self.attn_cfg = get_stage_cfg(config.attn_cfg, stage_idx)
+    self.ssm_cfg = _get_stage_cfg(config.ssm_cfg, stage_idx)
+    self.attn_cfg = _get_stage_cfg(config.attn_cfg, stage_idx)
 
     arch_layout = config.arch_layout
     for _ in range(stage_idx):
       arch_layout = arch_layout[1]
-    arch_layout = arch_layout[pos_idx]
+    arch_layout = cast(str, arch_layout[pos_idx])
     layout_parse = re.findall(r"([mMtT])(\d+)", arch_layout)
 
     layers = []
@@ -107,9 +116,10 @@ class Isotropic(Module):
 
     The inference cache contains a list of inference caches, one for each block.
     """
-    key_value_memory_dict = {}
+    key_value_memory_dict: dict[int, Tensor] = {}
     for i, layer in enumerate(self.layers):
-      key_value_memory_dict[i] = layer.allocate_inference_cache(
+      block = cast(Block, layer)
+      key_value_memory_dict[i] = block.allocate_inference_cache(
         batch_size,
         max_seqlen,
         dtype=dtype,
@@ -162,14 +172,17 @@ class Isotropic(Module):
 
     return hidden_states
 
-  def step(self, hidden_states, inference_params):
+  def step(self, hidden_states: Tensor, inference_params):
     """
     Assumes hidden_states is (B, 1, D). Steps each of the layers in order, and then steps the main model.
     """
     residual = None
     for layer in self.layers:
-      hidden_states, residual = layer.step(
-        hidden_states, inference_params, residual=residual
+      block = cast(Block, layer)
+      hidden_states, residual = block.step(
+        hidden_states,
+        inference_params,
+        residual=residual,
       )
 
     hidden_states = self.rmsnorm(
@@ -180,7 +193,7 @@ class Isotropic(Module):
     return hidden_states
 
 
-def get_stage_cfg(cfg, stage_idx):
+def _get_stage_cfg(cfg, stage_idx):
   return {
     k: v[stage_idx] if isinstance(v, list) else v
     for k, v in asdict(cfg).items()

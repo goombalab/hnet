@@ -1,3 +1,5 @@
+from typing import cast
+
 from flash_attn.ops.triton.layer_norm import RMSNorm
 from torch import Tensor, dtype
 from torch._prims_common import DeviceLikeType
@@ -75,11 +77,14 @@ class Block(Module):
     batch_size,
     max_seqlen,
     dtype=None,
-  ):
-    return self.mixer.allocate_inference_cache(
-      batch_size,
-      max_seqlen,
-      dtype=dtype,
+  ) -> Tensor:
+    return cast(
+      Tensor,
+      self.mixer.allocate_inference_cache(
+        batch_size,
+        max_seqlen,
+        dtype=dtype,
+      ),
     )
 
   def step(self, hidden_states, inference_params, residual=None):

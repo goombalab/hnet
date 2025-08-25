@@ -5,11 +5,11 @@ from torch._prims_common import DeviceLikeType
 from torch.nn import Linear, Module, Parameter, init
 from typing_extensions import Self
 
-from hnet.modules.isotropic import Isotropic, IsotropicInferenceParams
 from lm.chunk_layer import ChunkLayer
 from lm.dechunk_layer import DeChunkLayer
 from lm.dechunk_state import DeChunkState
 from lm.hnet_config import HnetConfig
+from lm.isotropic import Isotropic, IsotropicInferenceParams
 from lm.routing_module import RoutingModule
 from lm.routing_module_state import RoutingModuleState
 
