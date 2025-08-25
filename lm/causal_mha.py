@@ -5,7 +5,8 @@ from flash_attn import (
 from torch import Tensor, empty
 from torch.nn import Linear, Module
 
-from hnet.modules.mha import FlashCausalCrossAttention, FlashCausalSelfAttention
+from lm.flash_causal_cross_attention import FlashCausalCrossAttention
+from lm.flash_causal_self_attention import FlashCausalSelfAttention
 from lm.rotary_embedding import RotaryEmbedding
 
 
