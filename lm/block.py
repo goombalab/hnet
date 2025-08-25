@@ -5,7 +5,7 @@ from torch import Tensor, dtype
 from torch._prims_common import DeviceLikeType
 from torch.nn import Module
 
-from hnet.modules.mha import CausalMHA
+from lm.causal_mha import CausalMHA
 from lm.mamba_2_wrapper import Mamba2Wrapper
 from lm.swiglu import Swiglu
 
