@@ -134,7 +134,7 @@ class Isotropic(Module):
     self,
     hidden_states: Tensor,
     mask: Tensor,
-    inference_params=None,
+    inference_params: IsotropicInferenceParams | None = None,
     **mixer_kwargs,
   ):
     attn_mixer_kwargs = copy.deepcopy(mixer_kwargs)

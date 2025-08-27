@@ -172,10 +172,13 @@ class Hnet(Module):
       )
 
     if isinstance(self.main_network, Isotropic):
+      assert isinstance(
+        inference_params.main_network_state, IsotropicInferenceParams
+      )
       hidden_states = self.main_network.forward(
         hidden_states,
-        mask=mask,
-        inference_params=inference_params.main_network_state,
+        mask,
+        inference_params.main_network_state,
       )
       hidden_states = hidden_states[..., :D]
       return hidden_states, []
@@ -231,8 +234,8 @@ class Hnet(Module):
 
     hidden_states = self.decoder.forward(
       hidden_states,
-      mask=mask,
-      inference_params=inference_params.decoder_state,
+      mask,
+      inference_params.decoder_state,
     )
 
     hidden_states = hidden_states[..., :D]
