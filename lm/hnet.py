@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from torch import cat, dtype, float32, zeros
+from torch import Tensor, cat, dtype, float32, zeros
 from torch._prims_common import DeviceLikeType
 from torch.nn import Linear, Module, Parameter, init
 from typing_extensions import Self
@@ -158,9 +158,9 @@ class Hnet(Module):
 
   def forward(
     self,
-    hidden_states,
-    mask,
-    inference_params,
+    hidden_states: Tensor,
+    mask: Tensor,
+    inference_params: HnetState,
     **mixer_kwargs,
   ):
     D = hidden_states.shape[-1]
@@ -181,7 +181,15 @@ class Hnet(Module):
       hidden_states = hidden_states[..., :D]
       return hidden_states, []
 
-    assert self.encoder is not None
+    assert (
+      self.encoder is not None
+      and self.residual_proj is not None
+      and self.routing_module is not None
+      and self.chunk_layer is not None
+      and self.dechunk_layer is not None
+      and self.decoder is not None
+      and isinstance(inference_params.main_network_state, HnetState)
+    )
     hidden_states = self.encoder.forward(
       hidden_states,
       mask=mask,
@@ -189,19 +197,16 @@ class Hnet(Module):
       **mixer_kwargs,
     )
 
-    assert self.residual_proj is not None
     hidden_states_for_residual = hidden_states.to(
       dtype=self.residual_proj.weight.dtype
     )
     residual = self.residual_proj.forward(hidden_states_for_residual)
 
-    assert self.routing_module is not None
     bpred_output = self.routing_module.forward(
       hidden_states,
       mask=mask,
       inference_params=inference_params.routing_module_state,
     )
-    assert self.chunk_layer is not None
     hidden_states, next_mask = self.chunk_layer.forward(
       hidden_states,
       bpred_output.boundary_mask,
@@ -214,7 +219,6 @@ class Hnet(Module):
       **mixer_kwargs,
     )
 
-    assert self.dechunk_layer is not None
     hidden_states = self.dechunk_layer.forward(
       hidden_states,
       bpred_output.boundary_mask,
@@ -229,7 +233,6 @@ class Hnet(Module):
       bpred_output.selected_probs,
     ).to(hidden_states.dtype)
 
-    assert self.decoder is not None
     hidden_states = self.decoder.forward(
       hidden_states,
       mask=mask,

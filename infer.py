@@ -17,14 +17,14 @@ def generate(
   tokens_b = tokenizer.encode(prompt, add_bos=True)
   tokens = tensor(tokens_b, dtype=long, device=device).unsqueeze(0)
 
-  cache = model.allocate_inference_cache(
+  inference_cache = model.allocate_inference_cache(
     batch_size=1,
     max_seqlen=tokens.shape[1] + max_token,
     dtype=bfloat16,
   )
 
   mask = ones(tokens.shape, device=device, dtype=bool)
-  output = model.forward(tokens, inference_params=cache, mask=mask)
+  output = model.forward(tokens, inference_cache, mask)
   logits = output.logits[0, -1, :] / temperature
 
   for _ in range(max_token):
@@ -37,7 +37,7 @@ def generate(
     current_token = next_token.unsqueeze(0)
     yield current_token
 
-    output = model.step(current_token, cache)
+    output = model.step(current_token, inference_cache)
     logits = output.logits[0, -1, :] / temperature
 
 
