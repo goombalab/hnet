@@ -161,14 +161,14 @@ class Hnet(Module):
     hidden_states: Tensor,
     mask: Tensor,
     inference_params: HnetState,
-    **mixer_kwargs,
   ):
     D = hidden_states.shape[-1]
     EARLY_DIMS = hidden_states.shape[:-1]
 
     if self.pad_dimension is not None:
       hidden_states = cat(
-        (hidden_states, self.pad_dimension.expand(EARLY_DIMS + (-1,))), dim=-1
+        (hidden_states, self.pad_dimension.expand(EARLY_DIMS + (-1,))),
+        dim=-1,
       )
 
     if isinstance(self.main_network, Isotropic):
@@ -176,7 +176,6 @@ class Hnet(Module):
         hidden_states,
         mask=mask,
         inference_params=inference_params.main_network_state,
-        **mixer_kwargs,
       )
       hidden_states = hidden_states[..., :D]
       return hidden_states, []
@@ -194,7 +193,6 @@ class Hnet(Module):
       hidden_states,
       mask=mask,
       inference_params=inference_params.encoder_state,
-      **mixer_kwargs,
     )
 
     hidden_states_for_residual = hidden_states.to(
@@ -216,7 +214,6 @@ class Hnet(Module):
       hidden_states,
       mask=next_mask,
       inference_params=inference_params.main_network_state,
-      **mixer_kwargs,
     )
 
     hidden_states = self.dechunk_layer.forward(
@@ -226,7 +223,6 @@ class Hnet(Module):
       mask=mask,
       inference_params=inference_params.dechunk_state,
     )
-
     hidden_states = self.residual_func(
       hidden_states.to(dtype=residual.dtype),
       residual,
@@ -237,7 +233,6 @@ class Hnet(Module):
       hidden_states,
       mask=mask,
       inference_params=inference_params.decoder_state,
-      **mixer_kwargs,
     )
 
     hidden_states = hidden_states[..., :D]

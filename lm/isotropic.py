@@ -132,8 +132,8 @@ class Isotropic(Module):
 
   def forward(
     self,
-    hidden_states,
-    mask,
+    hidden_states: Tensor,
+    mask: Tensor,
     inference_params=None,
     **mixer_kwargs,
   ):
