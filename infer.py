@@ -52,7 +52,7 @@ def main():
   dtype = bfloat16
 
   config = HnetConfig.load(config_path)
-  model = HnetForCausalLm(config, device=device, dtype=dtype).load(model_path)
+  model = HnetForCausalLm(config, device, dtype).load(model_path)
   tokenizer = ByteTokenizer()
 
   tokens = []

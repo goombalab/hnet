@@ -19,7 +19,6 @@ class CausalLmOutput:
   inference_params: HnetState
 
 
-@dataclass(eq=False)
 class HnetForCausalLm(Module):
   embeddings: Embedding
   backbone: Hnet
@@ -28,8 +27,8 @@ class HnetForCausalLm(Module):
   def __init__(
     self,
     config: HnetConfig,
-    device: DeviceLikeType | None = None,
-    dtype: dtype | None = None,
+    device: DeviceLikeType,
+    dtype: dtype,
   ) -> None:
     super().__init__()
 

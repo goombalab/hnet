@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from torch import Tensor, autograd, cat, dtype, float32, ones_like, zeros
+from torch import cat, dtype, float32, zeros
 from torch._prims_common import DeviceLikeType
 from torch.nn import Linear, Module, Parameter, init
 from typing_extensions import Self
@@ -12,22 +12,7 @@ from lm.hnet_config import HnetConfig
 from lm.isotropic import Isotropic, IsotropicInferenceParams
 from lm.routing_module import RoutingModule
 from lm.routing_module_state import RoutingModuleState
-
-
-class STE(autograd.Function):
-  @staticmethod
-  def forward(ctx, x: Tensor):
-    return ones_like(x)
-
-  @staticmethod
-  def backward(ctx, *grad_outputs: list[Tensor]):
-    (grad_x,) = grad_outputs
-    grad_x = grad_outputs
-    return grad_x
-
-
-def ste_func(x: Tensor):
-  return STE.apply(x)
+from lm.ste import ste_func
 
 
 @dataclass
@@ -65,6 +50,7 @@ class Hnet(Module):
       f"Wrong arch_layout: {arch_layout}"
     )
 
+    d_model_n = config.d_model[stage_idx]
     is_innermost = len(arch_layout) == 1
 
     if is_innermost:
@@ -92,8 +78,6 @@ class Hnet(Module):
         dtype=dtype,
       )
 
-    d_model_n = config.d_model[stage_idx]
-    if not is_innermost:
       self.routing_module = RoutingModule(d_model_n, device, dtype)
       self.chunk_layer = ChunkLayer()
       self.dechunk_layer = DeChunkLayer(d_model_n)
