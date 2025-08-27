@@ -134,7 +134,7 @@ class Isotropic(Module):
     self,
     hidden_states: Tensor,
     mask: Tensor,
-    inference_params: IsotropicInferenceParams | None = None,
+    inference_params: IsotropicInferenceParams,
     **mixer_kwargs,
   ):
     attn_mixer_kwargs = copy.deepcopy(mixer_kwargs)
@@ -165,10 +165,9 @@ class Isotropic(Module):
       hidden_states, residual=residual, prenorm=False, residual_in_fp32=True
     )
 
-    if inference_params is not None:
-      # here we also explicitly assume the mask is all True
-      assert mask.shape[0] == 1, "seqlen_offset handling assumes batch size 1"
-      inference_params.seqlen_offset += hidden_states.shape[1]
+    # here we also explicitly assume the mask is all True
+    assert mask.shape[0] == 1, "seqlen_offset handling assumes batch size 1"
+    inference_params.seqlen_offset += hidden_states.shape[1]
 
     return hidden_states
 
