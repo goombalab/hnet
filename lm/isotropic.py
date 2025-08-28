@@ -78,9 +78,9 @@ class Isotropic(Module):
         create_block(
           arch,
           self.d_model,
-          d_intermediate=config.d_intermediate[self.stage_idx],
-          ssm_cfg=self.ssm_cfg,
-          attn_cfg=self.attn_cfg,
+          config.d_intermediate[self.stage_idx],
+          self.ssm_cfg,
+          self.attn_cfg,
           layer_idx=(layer_idx + i),
           device=device,
           dtype=dtype,

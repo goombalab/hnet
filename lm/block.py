@@ -64,12 +64,12 @@ class Block(Module):
         Tuple[Tensor, Tensor],
         self.norm2.forward(
           hidden_states,
-          residual=residual,
+          residual,
           prenorm=True,
           residual_in_fp32=self.residual_in_fp32,
         ),
       )
-      hidden_states = self.mlp(hidden_states)
+      hidden_states = self.mlp.forward(hidden_states)
 
     return hidden_states, residual
 
@@ -152,17 +152,14 @@ def create_block(
       device=device,
       dtype=dtype,
     )
+    norm2 = RMSNorm(d_model, eps=norm_epsilon, device=device, dtype=dtype)
   elif arch in ("t", "m"):
     mlp = None
+    norm2 = None
   else:
     raise NotImplementedError
 
   norm1 = RMSNorm(d_model, eps=norm_epsilon, device=device, dtype=dtype)
-  norm2 = (
-    RMSNorm(d_model, eps=norm_epsilon, device=device, dtype=dtype)
-    if isinstance(mlp, Swiglu)
-    else None
-  )
 
   return Block(
     mixer,

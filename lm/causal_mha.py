@@ -164,8 +164,6 @@ class CausalMHA(Module):
   def forward(
     self,
     x: Tensor,
-    cu_seqlens=None,
-    max_seqlen=None,
     inference_params=None,
   ):
     """
@@ -180,13 +178,6 @@ class CausalMHA(Module):
         inference_params: for generation. Adapted from Megatron-LM (and Apex)
         https://github.com/NVIDIA/apex/blob/3ff1a10f72ec07067c4e44759442329804ac5162/apex/transformer/testing/standalone_transformer_lm.py#L470
     """
-    if cu_seqlens is not None:
-      assert max_seqlen is not None
-      # assert self.rotary_emb_dim == 0
-    if inference_params is not None:
-      assert cu_seqlens is None and max_seqlen is None
-
-    kwargs = {"cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
     seqlen_offset = (
       0
       if inference_params is None
@@ -208,12 +199,9 @@ class CausalMHA(Module):
       or (self.rotary_emb_dim == 0 or self.rotary_emb_dim % 16 != 0)
     ):
       if self.rotary_emb_dim > 0:
-        # qkv = self.rotary_emb(
-        #     qkv, seqlen_offset=seqlen_offset, max_seqlen=rotary_max_seqlen
-        # )
-        qkv = self.rotary_emb(qkv, seqlen_offset=seqlen_offset, **kwargs)
+        qkv = self.rotary_emb(qkv, seqlen_offset=seqlen_offset)
       if inference_params is None:
-        context = self.inner_attn(qkv, **kwargs)
+        context = self.inner_attn(qkv)
       else:
         context = self._update_kvcache_attention(
           qkv[:, :, 0], qkv[:, :, 1:], inference_params
@@ -225,7 +213,7 @@ class CausalMHA(Module):
     out = self.out_proj(rearrange(context, "... h d -> ... (h d)"))
     return out
 
-  def next_step(self, x, inference_params):
+  def next_step(self, x: Tensor, inference_params):
     return self.forward(x, inference_params=inference_params)
 
 
