@@ -31,5 +31,9 @@ class ChunkLayer(Module):
 
     return next_hidden_states, next_mask
 
-  def step(self, hidden_states: Tensor, boundary_mask: Tensor) -> Tensor:
+  def step(
+    self,
+    hidden_states: Tensor,
+    boundary_mask: Tensor,
+  ) -> Tensor:
     return hidden_states[boundary_mask]

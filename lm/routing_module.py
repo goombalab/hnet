@@ -93,7 +93,11 @@ class RoutingModule(Module):
       selected_probs=selected_probs,  # (shape hidden_states.shape[:-1], 1)
     )
 
-  def step(self, hidden_states, inference_params):
+  def step(
+    self,
+    hidden_states: Tensor,
+    inference_params: RoutingModuleState,
+  ):
     # hidden_states is (B, 1, D)
     hidden_states = hidden_states.squeeze(1)
     cos_sim = einsum(

@@ -171,7 +171,11 @@ class Isotropic(Module):
 
     return hidden_states
 
-  def step(self, hidden_states: Tensor, inference_params):
+  def step(
+    self,
+    hidden_states: Tensor,
+    inference_params: IsotropicInferenceParams,
+  ):
     """
     Assumes hidden_states is (B, 1, D). Steps each of the layers in order, and then steps the main model.
     """

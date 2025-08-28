@@ -245,7 +245,11 @@ class Hnet(Module):
     hidden_states = hidden_states[..., :D]
     return hidden_states, [bpred_output, *prev_boundary_predictions]
 
-  def step(self, hidden_states, inference_params):
+  def step(
+    self,
+    hidden_states: Tensor,
+    inference_params: HnetState,
+  ):
     D = hidden_states.shape[-1]
 
     if self.pad_dimension is not None:
@@ -258,6 +262,9 @@ class Hnet(Module):
       )
 
     if isinstance(self.main_network, Isotropic):
+      assert isinstance(
+        inference_params.main_network_state, IsotropicInferenceParams
+      )
       hidden_states = self.main_network.step(
         hidden_states,
         inference_params.main_network_state,
@@ -265,21 +272,32 @@ class Hnet(Module):
       hidden_states = hidden_states[..., :D]
       return hidden_states, []
 
-    assert self.encoder is not None
-    hidden_states = self.encoder.step(
-      hidden_states, inference_params.encoder_state
+    assert (
+      self.encoder is not None
+      and self.residual_proj is not None
+      and self.routing_module is not None
+      and self.chunk_layer is not None
+      and self.dechunk_layer is not None
+      and self.decoder is not None
+      and isinstance(inference_params.main_network_state, HnetState)
+      and isinstance(inference_params.encoder_state, IsotropicInferenceParams)
+      and isinstance(inference_params.routing_module_state, RoutingModuleState)
+      and isinstance(inference_params.decoder_state, IsotropicInferenceParams)
+      and isinstance(inference_params.dechunk_state, DeChunkState)
     )
-    assert self.residual_proj is not None
+    hidden_states = self.encoder.step(
+      hidden_states,
+      inference_params.encoder_state,
+    )
     hidden_states_for_residual = hidden_states.to(
       dtype=self.residual_proj.weight.dtype
     )
     residual = self.residual_proj.forward(hidden_states_for_residual)
 
-    assert self.routing_module is not None
     bpred_output = self.routing_module.step(
-      hidden_states, inference_params.routing_module_state
+      hidden_states,
+      inference_params.routing_module_state,
     )
-    assert self.chunk_layer is not None
     hidden_states_inner = self.chunk_layer.step(
       hidden_states,
       bpred_output.boundary_mask,
@@ -287,12 +305,12 @@ class Hnet(Module):
 
     if hidden_states_inner.shape[0] > 0:
       hidden_states_inner, prev_boundary_predictions = self.main_network.step(
-        hidden_states_inner, inference_params.main_network_state
+        hidden_states_inner,
+        inference_params.main_network_state,
       )
     else:
       prev_boundary_predictions = []
 
-    assert self.dechunk_layer is not None
     hidden_states = self.dechunk_layer.step(
       hidden_states_inner,
       bpred_output.boundary_mask,
@@ -306,7 +324,6 @@ class Hnet(Module):
       bpred_output.selected_probs,
     ).to(hidden_states.dtype)
 
-    assert self.decoder is not None
     hidden_states = self.decoder.step(
       hidden_states,
       inference_params.decoder_state,

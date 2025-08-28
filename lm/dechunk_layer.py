@@ -116,7 +116,7 @@ class DeChunkLayer(Module):
     hidden_states: Tensor,
     boundary_mask: Tensor,
     boundary_prob: Tensor,
-    inference_params,
+    inference_params: DeChunkState,
   ):
     # hidden_states is (B', 1, D), where B' = boundary_mask.sum()
     # boundary_mask is (B,) and boundary_prob is (B, 2)
