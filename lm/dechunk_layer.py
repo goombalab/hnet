@@ -48,11 +48,11 @@ class DeChunkLayer(Module):
 
   def forward(
     self,
-    hidden_states,
-    boundary_mask,
-    boundary_prob,
-    inference_params=None,
-    mask=None,
+    hidden_states: Tensor,
+    boundary_mask: Tensor,
+    boundary_prob: Tensor,
+    mask: Tensor,
+    inference_params: DeChunkState,
   ):
     if inference_params is None:
       assert mask is not None, (

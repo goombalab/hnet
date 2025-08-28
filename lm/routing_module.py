@@ -43,16 +43,11 @@ class RoutingModule(Module):
     )
 
   def forward(
-    self, hidden_states, mask: Tensor | None = None, inference_params=None
+    self,
+    hidden_states: Tensor,
+    mask: Tensor,
+    inference_params: RoutingModuleState,
   ):
-    if inference_params is not None:
-      assert mask is not None, (
-        "Mask must be provided if inference_params is not provided"
-      )
-      assert (~inference_params.has_seen_tokens).all(), (
-        "Cannot have seen tokens when inference_params is not provided"
-      )
-
     cos_sim = einsum(
       "b l d, b l d -> b l",
       F.normalize(self.q_proj_layer(hidden_states[:, :-1]), dim=-1),
@@ -70,27 +65,23 @@ class RoutingModule(Module):
     selected_idx = argmax(boundary_prob, dim=-1)
 
     boundary_mask = selected_idx == 1  # (shape hidden_states.shape[:-1])
-    if mask is not None:
-      # No invalid tokens can be selected
-      boundary_mask = boundary_mask & mask
+    boundary_mask = boundary_mask & mask
 
-    if inference_params is not None:
-      assert mask is not None
-      has_mask = mask.any(dim=-1)
-      inference_params.has_seen_tokens.copy_(
-        has_mask | inference_params.has_seen_tokens
+    has_mask = mask.any(dim=-1)
+    inference_params.has_seen_tokens.copy_(
+      has_mask | inference_params.has_seen_tokens
+    )
+    last_mask = clamp(mask.sum(dim=-1) - 1, min=0)
+    inference_params.last_hidden_state.copy_(
+      where(
+        has_mask,
+        hidden_states[
+          arange(hidden_states.shape[0], device=hidden_states.device),
+          last_mask,
+        ],
+        inference_params.last_hidden_state,
       )
-      last_mask = clamp(mask.sum(dim=-1) - 1, min=0)
-      inference_params.last_hidden_state.copy_(
-        where(
-          has_mask,
-          hidden_states[
-            arange(hidden_states.shape[0], device=hidden_states.device),
-            last_mask,
-          ],
-          inference_params.last_hidden_state,
-        )
-      )
+    )
 
     selected_probs = boundary_prob.gather(
       dim=-1, index=selected_idx.unsqueeze(-1)

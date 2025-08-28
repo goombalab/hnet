@@ -191,11 +191,15 @@ class Hnet(Module):
       and self.dechunk_layer is not None
       and self.decoder is not None
       and isinstance(inference_params.main_network_state, HnetState)
+      and isinstance(inference_params.encoder_state, IsotropicInferenceParams)
+      and isinstance(inference_params.routing_module_state, RoutingModuleState)
+      and isinstance(inference_params.decoder_state, IsotropicInferenceParams)
+      and isinstance(inference_params.dechunk_state, DeChunkState)
     )
     hidden_states = self.encoder.forward(
       hidden_states,
-      mask=mask,
-      inference_params=inference_params.encoder_state,
+      mask,
+      inference_params.encoder_state,
     )
 
     hidden_states_for_residual = hidden_states.to(
@@ -205,8 +209,8 @@ class Hnet(Module):
 
     bpred_output = self.routing_module.forward(
       hidden_states,
-      mask=mask,
-      inference_params=inference_params.routing_module_state,
+      mask,
+      inference_params.routing_module_state,
     )
     hidden_states, next_mask = self.chunk_layer.forward(
       hidden_states,
@@ -215,16 +219,16 @@ class Hnet(Module):
 
     hidden_states, prev_boundary_predictions = self.main_network.forward(
       hidden_states,
-      mask=next_mask,
-      inference_params=inference_params.main_network_state,
+      next_mask,
+      inference_params.main_network_state,
     )
 
     hidden_states = self.dechunk_layer.forward(
       hidden_states,
       bpred_output.boundary_mask,
       bpred_output.boundary_prob,
-      mask=mask,
-      inference_params=inference_params.dechunk_state,
+      mask,
+      inference_params.dechunk_state,
     )
     hidden_states = self.residual_func(
       hidden_states.to(dtype=residual.dtype),
@@ -255,7 +259,8 @@ class Hnet(Module):
 
     if isinstance(self.main_network, Isotropic):
       hidden_states = self.main_network.step(
-        hidden_states, inference_params.main_network_state
+        hidden_states,
+        inference_params.main_network_state,
       )
       hidden_states = hidden_states[..., :D]
       return hidden_states, []

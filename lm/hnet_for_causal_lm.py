@@ -87,7 +87,7 @@ class HnetForCausalLm(Module):
     hidden_states, bpred_output = self.backbone.forward(
       hidden_states,
       mask,
-      inference_params=inference_params,
+      inference_params,
     )
 
     logits = self.lm_head.forward(hidden_states)
