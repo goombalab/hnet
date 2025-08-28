@@ -1,4 +1,3 @@
-import copy
 import re
 from dataclasses import asdict, dataclass, field
 from typing import cast
@@ -135,34 +134,25 @@ class Isotropic(Module):
     hidden_states: Tensor,
     mask: Tensor,
     inference_params: IsotropicInferenceParams,
-    **mixer_kwargs,
   ):
-    attn_mixer_kwargs = copy.deepcopy(mixer_kwargs)
-    ssm_mixer_kwargs = copy.deepcopy(mixer_kwargs)
-
     residual = None
     for layer, arch in zip(self.layers, self.arch_full):
-      if arch in ("m", "M"):
-        layer_mixer_kwargs = ssm_mixer_kwargs
-        if hidden_states.dim() == 2:
-          hidden_states = hidden_states.unsqueeze(0)
-          residual = None if residual is None else residual.unsqueeze(0)
-      elif arch in ("t", "T"):
-        layer_mixer_kwargs = attn_mixer_kwargs
-      else:
-        # Currently supporting only Mamba2 and MHA
-        raise NotImplementedError
-
-      hidden_states, residual = layer(
+      block = cast(Block, layer)
+      hidden_states, residual = block.forward(
         hidden_states,
         residual,
         inference_params=inference_params,
-        mixer_kwargs=layer_mixer_kwargs,
       )
 
     # Setting prenorm=False ignores the residual
-    hidden_states = self.rmsnorm(
-      hidden_states, residual=residual, prenorm=False, residual_in_fp32=True
+    hidden_states = cast(
+      Tensor,
+      self.rmsnorm.forward(
+        hidden_states,
+        residual,
+        prenorm=False,
+        residual_in_fp32=True,
+      ),
     )
 
     # here we also explicitly assume the mask is all True

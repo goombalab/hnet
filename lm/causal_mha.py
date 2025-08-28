@@ -167,7 +167,6 @@ class CausalMHA(Module):
     cu_seqlens=None,
     max_seqlen=None,
     inference_params=None,
-    **kwargs,
   ):
     """
     Arguments:
@@ -187,7 +186,7 @@ class CausalMHA(Module):
     if inference_params is not None:
       assert cu_seqlens is None and max_seqlen is None
 
-    kwargs = {"cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen, **kwargs}
+    kwargs = {"cu_seqlens": cu_seqlens, "max_seqlen": max_seqlen}
     seqlen_offset = (
       0
       if inference_params is None

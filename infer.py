@@ -42,8 +42,8 @@ def generate(
 
 
 def main():
-  model_path = "model/hnet_1stage_L.pt"
-  config_path = "config/hnet_1stage_L.json"
+  model_path = "model/hnet_2stage_XL.pt"
+  config_path = "config/hnet_2stage_XL.json"
   prompt = "sun is"
   max_tokens = 32
   temperature = 0.0001

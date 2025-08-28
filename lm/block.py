@@ -36,23 +36,24 @@ class Block(Module):
   def forward(
     self,
     hidden_states: Tensor,
-    residual: Tensor | None = None,
+    residual: Tensor | None,
     inference_params=None,
-    mixer_kwargs=None,
   ):
-    hidden_states, residual = self.norm1(
-      hidden_states,
-      residual=residual,
-      prenorm=True,
-      residual_in_fp32=self.residual_in_fp32,
+    from typing import cast
+
+    hidden_states, residual = cast(
+      Tensor,
+      self.norm1.forward(
+        hidden_states,
+        residual=residual,
+        prenorm=True,
+        residual_in_fp32=self.residual_in_fp32,
+      ),
     )
 
-    if mixer_kwargs is None:
-      mixer_kwargs = {}
-    hidden_states = self.mixer(
+    hidden_states = self.mixer.forward(
       hidden_states,
       inference_params=inference_params,
-      **mixer_kwargs,
     )
 
     if self.mlp is not None:
