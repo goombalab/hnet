@@ -163,7 +163,7 @@ class CausalMHA(Module):
 
   def forward(
     self,
-    x,
+    x: Tensor,
     cu_seqlens=None,
     max_seqlen=None,
     inference_params=None,

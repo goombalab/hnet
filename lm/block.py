@@ -27,11 +27,11 @@ class Block(Module):
   ):
     super().__init__()
 
-    self.residual_in_fp32 = residual_in_fp32
-    self.norm1 = norm1
     self.mixer = mixer
     self.mlp = mlp
+    self.norm1 = norm1
     self.norm2 = norm2
+    self.residual_in_fp32 = residual_in_fp32
 
   def forward(
     self,
@@ -45,7 +45,7 @@ class Block(Module):
       Tensor,
       self.norm1.forward(
         hidden_states,
-        residual=residual,
+        residual,
         prenorm=True,
         residual_in_fp32=self.residual_in_fp32,
       ),

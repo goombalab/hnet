@@ -136,7 +136,7 @@ class Isotropic(Module):
     inference_params: IsotropicInferenceParams,
   ):
     residual = None
-    for layer, arch in zip(self.layers, self.arch_full):
+    for layer in self.layers:
       block = cast(Block, layer)
       hidden_states, residual = block.forward(
         hidden_states,
