@@ -6,6 +6,7 @@ from torch._prims_common import DeviceLikeType
 from torch.nn import Module
 
 from lm.causal_mha import CausalMHA
+from lm.isotropic_inference_params import IsotropicInferenceParams
 from lm.mamba_2_wrapper import Mamba2Wrapper
 from lm.swiglu import Swiglu
 
@@ -37,7 +38,7 @@ class Block(Module):
     self,
     hidden_states: Tensor,
     residual: Tensor | None,
-    inference_params=None,
+    inference_params: IsotropicInferenceParams,
   ):
     from typing import cast
 

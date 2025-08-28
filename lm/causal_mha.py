@@ -7,6 +7,7 @@ from torch.nn import Linear, Module
 
 from lm.flash_causal_cross_attention import FlashCausalCrossAttention
 from lm.flash_causal_self_attention import FlashCausalSelfAttention
+from lm.isotropic_inference_params import IsotropicInferenceParams
 from lm.rotary_embedding import RotaryEmbedding
 
 
@@ -164,7 +165,7 @@ class CausalMHA(Module):
   def forward(
     self,
     x: Tensor,
-    inference_params=None,
+    inference_params: IsotropicInferenceParams,
   ):
     """
     Arguments:
@@ -179,15 +180,10 @@ class CausalMHA(Module):
         https://github.com/NVIDIA/apex/blob/3ff1a10f72ec07067c4e44759442329804ac5162/apex/transformer/testing/standalone_transformer_lm.py#L470
     """
     seqlen_offset = (
-      0
-      if inference_params is None
-      else (
-        inference_params.lengths_per_sample
-        if inference_params.lengths_per_sample is not None
-        else inference_params.seqlen_offset
-      )
+      inference_params.lengths_per_sample
+      if inference_params.lengths_per_sample is not None
+      else inference_params.seqlen_offset
     )
-    _ = inference_params.max_seqlen if inference_params is not None else None
 
     qkv = self.Wqkv(x)
     qkv = rearrange(
@@ -213,8 +209,8 @@ class CausalMHA(Module):
     out = self.out_proj(rearrange(context, "... h d -> ... (h d)"))
     return out
 
-  def next_step(self, x: Tensor, inference_params):
-    return self.forward(x, inference_params=inference_params)
+  def next_step(self, x: Tensor, inference_params: IsotropicInferenceParams):
+    return self.forward(x, inference_params)
 
 
 def _update_kv_cache(kv, inference_params, layer_idx):
