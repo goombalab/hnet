@@ -152,8 +152,14 @@ class Isotropic(Module):
         residual=residual,
       )
 
-    hidden_states = self.rmsnorm(
-      hidden_states, residual=residual, prenorm=False, residual_in_fp32=True
+    hidden_states = cast(
+      Tensor,
+      self.rmsnorm.forward(
+        hidden_states,
+        residual=residual,
+        prenorm=False,
+        residual_in_fp32=True,
+      ),
     )
     inference_params.seqlen_offset += 1
 
