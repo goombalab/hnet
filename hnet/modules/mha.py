@@ -215,6 +215,7 @@ class CausalMHA(nn.Module):
         self.layer_idx = layer_idx
         self.softmax_scale = softmax_scale
         self.rotary_emb_dim = rotary_emb_dim
+        self.window_size = window_size
 
         self.num_heads = num_heads
         assert self.d_model % num_heads == 0, "d_model must be divisible by num_heads"
@@ -301,6 +302,7 @@ class CausalMHA(nn.Module):
             rotary_interleaved=(
                 self.rotary_emb.interleaved if self.rotary_emb_dim > 0 else False
             ),
+            window_size=(self.window_size, -1),
         )
         return context
 
@@ -331,6 +333,7 @@ class CausalMHA(nn.Module):
                 cache_seqlens=cache_seqlens,
                 softmax_scale=self.inner_cross_attn.softmax_scale,
                 causal=True,
+                window_size=(self.window_size, -1)
             )
 
     def forward(
