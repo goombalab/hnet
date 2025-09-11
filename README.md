@@ -1,3 +1,5 @@
+Archived. See [hnet-impl](https://github.com/main-horse/hnet-impl) for efficient version.
+
 # H-Net (simple reference impl)
 
 This repository contains simplified reimplementations of H-Net, for personal understanding.
