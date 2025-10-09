@@ -152,6 +152,11 @@ def main():
         default=1.0,
         help="Top-p sampling parameter (default: 1.0)",
     )
+    parser.add_argument(
+        "--prompt",
+        type=str,
+        help="prompt",
+    )
     args = parser.parse_args()
 
     print("Loading model...")
@@ -164,15 +169,17 @@ def main():
 
     tokenizer = ByteTokenizer()
 
+    print(
+        f"\nGenerating (max_tokens={args.max_tokens}, temperature={args.temperature}, top_p={args.top_p})"
+    )
+
     while True:
-        prompt = input("\nPrompt: ").strip()
+        prompt = args.prompt or input("Enter prompt (or 'exit' to quit): ")
 
         if not prompt:
+            print("No prompt provided. asking again...")
             continue
 
-        print(
-            f"\nGenerating (max_tokens={args.max_tokens}, temperature={args.temperature}, top_p={args.top_p})"
-        )
 
         print(f"\033[92m{prompt}\033[0m", end="")
         token_count = 0
