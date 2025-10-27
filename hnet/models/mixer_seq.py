@@ -206,7 +206,7 @@ class HNetForCausalLM(nn.Module, GenerationMixin):
                     )
                     ratio_loss_sum += stage_ratio_loss
                 # L = L_ar + \alpha * \sum_{stages} {L_ratio}
-                loss *= self.config.ratio_loss_weight * ratio_loss_sum
+                loss += self.config.ratio_loss_weight * ratio_loss_sum
 
         CausalLMOutput = namedtuple(
             "CausalLMOutput", ["logits", "bpred_output", "inference_params", "loss"]
