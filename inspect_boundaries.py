@@ -89,6 +89,11 @@ def main():
 
         if not text:
             continue
+            
+        if text.endswith(".txt"):
+            print("Reading text from file...")
+            with open(text, "r") as f:
+                text = f.read()
 
         print("Getting boundaries...")
         encoded = tokenizer.encode([text], add_bos=True)[0]
