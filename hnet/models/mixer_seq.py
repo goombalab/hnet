@@ -88,6 +88,7 @@ class HNetForCausalLM(nn.Module, GenerationMixin):
         inference_params=None,
         num_last_tokens=0,
         probe=None,
+        segmentation_only=True,
         **mixer_kwargs,
     ):
         """
@@ -121,6 +122,7 @@ class HNetForCausalLM(nn.Module, GenerationMixin):
             mask=mask,
             inference_params=inference_params,
             probe=probe,
+            segmentation_only=segmentation_only,
             **mixer_kwargs,
         )
 

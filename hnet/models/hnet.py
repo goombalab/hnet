@@ -204,6 +204,7 @@ class HNet(nn.Module):
     def forward(
         self,
         hidden_states,
+        segmentation_only=False,
         cu_seqlens=None,
         max_seqlen=None,
         mask=None,
@@ -259,12 +260,16 @@ class HNet(nn.Module):
         )
         residual = self.residual_proj(hidden_states_for_residual)
         if probe is not None: probe["hnet:residual"] = residual.clone().detach()
+
         bpred_output = self.routing_module(
             hidden_states,
             cu_seqlens=cu_seqlens,
             mask=mask,
             inference_params=inference_params.routing_module_state,
         )
+        if segmentation_only:
+            probe["boundaries"] = bpred_output.boundary_mask
+            return hidden_states, []
         hidden_states, next_cu_seqlens, next_max_seqlen, next_mask = self.chunk_layer(
             hidden_states, bpred_output.boundary_mask, cu_seqlens, mask=mask
         )
@@ -278,7 +283,9 @@ class HNet(nn.Module):
             inference_params=inference_params.main_network_state,
             **mixer_kwargs,
         )
-        if probe is not None: probe["hnet:hidden_states_after_main_network"] = hidden_states.clone().detach()
+        if probe is not None:
+            probe["hnet:bpred_output"] = bpred_output
+            probe["hnet:hidden_states_after_main_network"] = hidden_states.clone().detach()
 
         hidden_states = self.dechunk_layer(
             hidden_states,
