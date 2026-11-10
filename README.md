@@ -76,6 +76,33 @@ python generate.py --model-path hnet_2stage_XL.pt --config-path configs/hnet_2st
 ```
 
 
+## Training
+
+`train.py` trains a model from scratch on a flat byte corpus (no tokenizer; the corpus is raw UTF-8 bytes,
+the vocabulary is 256). It is the script behind two Finnish runs of 195M and 501M parameters.
+
+``` sh
+python train.py --config configs/hnet_1stage_L.json \
+                --train-bin data/train.bin --val-bin data/val.bin \
+                --out runs/hnet.pt --steps 100000 --batch 16 --seq-len 512
+```
+
+The loop is standard: random byte windows, next-byte cross-entropy, plus `load_balancing_loss` on the router
+outputs weighted at 0.01, AdamW with weight decay on matrices only, linear warmup then cosine decay, gradient
+clipping, bf16 autocast, and held-out bits/byte every 250 steps. Rerunning the same command resumes from
+`--out`.
+
+Two practical notes:
+
+- The script sets `use_mem_eff_path = False` on every Mamba2 module. The fused path calls
+  `causal_conv1d_fwd_function` directly and produced `nan` losses on ROCm; the non-fused path is stable and
+  also faster to compile.
+- Throughput is dominated by sequence length and Triton autotuning on the first step of a new shape, not by
+  step count. Judge nothing from step 0.
+
+A probe tool that reports chunk-length distributions and boundary alignment (word edges, suffix onsets) lives
+at [bqv/hnets](https://github.com/bqv/hnets), together with the ROCm shims needed to run this on non-CUDA hardware.
+
 ## Citation
 
 If you use this codebase, or otherwise find our work valuable, please cite H-Net:
